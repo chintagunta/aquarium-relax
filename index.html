@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
+    <meta name="theme-color" content="#0596cf" />
+    <meta
+      name="description"
+      content="A living reef: feed the fish, meet the octopus, the turtle and the mermaid, and watch the light move through the water."
+    />
+    <title>The Reef — a living aquarium</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230596cf'/%3E%3Cpath d='M18 32c6-11 20-13 26-6 3 3 3 9 0 12-6 7-20 5-26-6z' fill='%23f7913a' stroke='%234d2408' stroke-width='3'/%3E%3Cpath d='M44 32l10-9v18z' fill='%23f8bf3d' stroke='%234d2408' stroke-width='3' stroke-linejoin='round'/%3E%3Ccircle cx='27' cy='29' r='5' fill='%23fff' stroke='%234d2408' stroke-width='2.4'/%3E%3Ccircle cx='28' cy='29' r='2.2' fill='%23101c2e'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:ital,wght@0,400;0,600;0,700;1,400&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // A tiny in-page self-check. It records anything that throws while the
+      // reef is starting up and exposes the canvas size as attributes, so a
+      // smoke test (or a curious developer) can read the tank's state without
+      // a debugger attached. Costs a few bytes and no layout.
+      (function () {
+        var errors = [];
+        window.__REEF_ERRORS__ = errors;
+        function probe() {
+          var el = document.getElementById('reef-probe');
+          if (!el) {
+            el = document.createElement('div');
+            el.id = 'reef-probe';
+            el.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;overflow:hidden';
+            document.body.appendChild(el);
+          }
+          var canvas = document.querySelector('canvas');
+          el.setAttribute('data-errors', String(errors.length));
+          el.setAttribute('data-error-text', errors.slice(0, 3).join(' | ').slice(0, 400));
+          el.setAttribute('data-canvas', canvas ? canvas.width + 'x' + canvas.height : 'none');
+          el.textContent = 'errors=' + errors.length;
+        }
+        window.addEventListener('error', function (e) {
+          errors.push(String((e && (e.message || e.error)) || e));
+          probe();
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          errors.push('promise: ' + String(e.reason));
+          probe();
+        });
+        window.__reefProbe = probe;
+        setTimeout(probe, 400);
+        setTimeout(probe, 1600);
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

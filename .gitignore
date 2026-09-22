@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-ssr
+.vite
+*.local
+.DS_Store
+
+# local verification scratch (screenshots, reports, headless Chrome profiles)
+.qa/out
+.qa/p*
+.qa/chrome
+.qa/crop
+.qa/*.txt
+.npm-cache
+.vite-dev*.log
