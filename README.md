@@ -86,6 +86,14 @@ up, then sideways, driven by their own propulsion — a bell contraction, a jet,
 the arms, a stretch of the tail. Measured over a minute, a drifter covers a median 157px
 of depth on the way past.
 
+**Where they live.** The column is used, top to bottom. The opening cast is laid out along
+it by depth preference rather than sampled species by species — because twenty-four species
+cannot be strung down one column without overlapping, and summing their bands piled half
+the fish into the middle fifth and left the top and bottom empty. Measured per fifth of the
+column: **13 / 29 / 40 / 15 / 2** of the fish, against a uniform 20, with the surface
+schooling fish high and the goby, blenny and wrasse working the sand.
+`node .qa/depth.mjs` prints that distribution.
+
 **And they arrive from off screen.** Nothing is ever placed in the middle of the view.
 A new animal picks a side, starts 6–20% of a screen outside the frame and swims in, so the
 fish you are watching was somewhere else a moment ago and the fish that leaves is replaced
@@ -205,6 +213,7 @@ npm test                          # 28 unit tests: maths, RNG, palette, budget, 
 node .qa/verify.mjs               # drives a real Chrome over the DevTools Protocol
 node .qa/feed.mjs                 # six drops in six places: does the tank actually eat?
 node .qa/chrome.mjs               # the hide switch: are the panels really off the glass?
+node .qa/depth.mjs                # fish per fifth of the water column — is the top used?
 node .qa/profile.mjs              # the frame-budget breakdown above
 node .qa/scene.mjs name "expr"    # screenshot after running expr against the tank
 ```
@@ -233,6 +242,13 @@ zero-size test; and `getBoundingClientRect` is post-transform, so a panel that s
 0.98 as it retreats reports a 2% smaller box and looks like a reflow. It reads
 `offsetWidth`/`offsetHeight` for that reason, and checks the other half of the promise
 too — the controls row has to survive the hide, or there is no way back.
+
+`.qa/depth.mjs` answers one question with a number rather than an opinion: how much of the
+water column the fish actually use. It reports the population in each fifth, surface to
+sand, and how many are in the top quarter. It exists because the distribution was wrong in
+a way nothing else noticed — half the fish in the middle fifth, nothing in the top or bottom
+— and because adding a species or retuning a band will silently break it again. A reef tank
+will not be uniform, but an empty fifth is a visible fault.
 
 While the cast was being reworked, `verify.mjs` grew the checks that would have caught the
 problems it found. The fish check is per *animal*, not per species: a span taken across

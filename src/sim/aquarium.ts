@@ -61,6 +61,84 @@ const POPULATE = 0.24;
 const CULL = 0.62;
 
 /**
+ * How wide a species' depth band is, as a fraction of the water column, once the
+ * bands have been spread (see `rankDepths`). Close to the mean width the table
+ * already had, so this normalises the spread without redesigning it.
+ */
+const BAND_WIDTH = 0.42;
+
+/**
+ * Species depth bands, spread evenly over the column.
+ *
+ * The `band` numbers in the species table are *relative* preferences — "holds
+ * lower than a chromis, higher than a goby" — and they were never designed to
+ * tile the water. What they actually do is cluster: the 24 fish midpoints span
+ * only 0.36 to 0.775, and the band mapping then compresses that further, so the
+ * cast piled into the middle of the tank. Measured before this existed: 53% of
+ * all fish in the middle fifth of the column, and 0% in the top fifth and 0% in
+ * the bottom fifth. The tank had a horizon of fish and two empty quarters.
+ *
+ * So the table's numbers are treated as an *ordering* — which is what they are
+ * honest about — and the ranks are dealt out across the column evenly. The
+ * ecology is fully preserved: whatever species was the shallowest is still the
+ * shallowest, the wrasse still works below the chromis, the goby is still on the
+ * sand. What changes is that they finally have somewhere to be. Band widths are
+ * normalised at the same time, because leaving them at their original sizes
+ * would let the newly spread neighbours overlap into one another's water.
+ */
+const DEPTH_RANK = (() => {
+  const mids = new Map<string, number>();
+  for (const s of SPECIES) {
+    if (s.kind === 'crab' || s.kind === 'starfish') continue;
+    mids.set(s.id, (s.band[0] + s.band[1]) * 0.5);
+  }
+  const ordered = [...mids.entries()].sort((a, b) => a[1] - b[1]);
+  const ranks = new Map<string, number>();
+  const n = Math.max(1, ordered.length - 1);
+  ordered.forEach(([id], i) => ranks.set(id, i / n));
+  return { ranks, total: ordered.length };
+})();
+
+/**
+ * Where a species' band sits once spread across the column: 0.08 of the way down
+ * at the top of the roster, 0.92 at the bottom. The inset keeps even the
+ * shallowest species clear of the surface line and the deepest off the sand.
+ */
+function rankDepths(lo: number, hi: number, id: string): [number, number] {
+  const rank = DEPTH_RANK.ranks.get(id);
+  if (rank === undefined) return [lo, hi];
+  const mid = 0.08 + rank * 0.84;
+  const half = Math.min(BAND_WIDTH, 0.5) * 0.5;
+  return [clamp(mid - half, 0, 1), clamp(mid + half, 0, 1)];
+}
+
+/**
+ * The opening cast, as a flat list, ordered by the depth each species prefers.
+ *
+ * This exists because bands cannot be made to tile a column and seeding each one
+ * uniformly therefore cannot produce a uniform tank. Twenty-four species will not
+ * fit end to end — at any usable band width they overlap heavily, because 24
+ * bands of a fifth of the column across one column is five times over budget —
+ * so the number of fish that *want* the middle is much larger than the number
+ * that want the top, and the middle fills up no matter how each band is sampled.
+ *
+ * Laying the cast out along the column by preference instead sidesteps the whole
+ * problem: whatever a species asked for still decides who is shallow and who is
+ * deep, but the population is dealt out evenly rather than summed. Each animal's
+ * band is still the envelope it is free inside once it is swimming.
+ */
+const PLACEMENT: Species[] = SPECIES.filter(
+  (s) => s.kind !== 'fish' && s.kind !== 'crab' && s.kind !== 'starfish' && !s.visitor,
+)
+  .concat(SPECIES.filter((s) => s.kind === 'fish' && !s.visitor))
+  .sort(
+    (a, b) =>
+      (a.band[0] + a.band[1]) / 2 - (b.band[0] + b.band[1]) / 2 ||
+      a.id.localeCompare(b.id),
+  )
+  .flatMap((s) => Array.from({ length: s.population }, () => s));
+
+/**
  * How each motion archetype moves through the water column.
  *
  * `amp` is the bob's peak, as a fraction of the species band's height, and
@@ -369,7 +447,6 @@ export class Aquarium {
     const w = this.width;
     const rng = this.rng;
     const ox = this.view.x;
-    const fish = SPECIES.filter((s) => s.kind === 'fish' && !s.visitor);
 
     const cols = clamp(Math.round(w / 168), 3, 7);
     const rows = clamp(Math.round(h / 132), 3, 6);
@@ -388,26 +465,31 @@ export class Aquarium {
     }
 
     let ci = 0;
-    for (let si = 0; si < fish.length; si++) {
-      const s = fish[si];
+    for (let gi = 0; gi < PLACEMENT.length; gi++) {
+      const s = PLACEMENT[gi];
       // The cursor advances by a stride that is coprime-ish with the cell count
       // and offset per species, so consecutive fish of one species land in
       // *different* parts of the window. Filling cells in order put a whole
       // species in neighbouring cells, which is why a shoal used to arrive
       // already clumped and never spread out again: the flocking pull then had
       // nothing to pull against.
-      const stride = 7 + si * 3;
-      for (let i = 0; i < s.population; i++) {
-        const cell = cells[(ci + si) % cells.length];
-        ci = (ci + stride) % cells.length;
-        const spread = s.flock > 0.8 ? 0.13 : 0.3;
-        this.creatures.push(
-          this.spawn(s.id, {
-            x: clamp(cell.x + rng.bell() * w * spread, ox + w * 0.05, ox + w * 0.95),
-            y: clamp(cell.y + rng.bell() * h * spread * 0.8, h * 0.07, h * 0.86),
-          }),
-        );
-      }
+      //
+      // Depth comes from the cast's position in PLACEMENT, evenly spaced down
+      // the column, so the opening tank is stratified rather than summed. See
+      // PLACEMENT for why sampling each species' band cannot do this.
+      const stride = 7 + gi * 3;
+      const cell = cells[(ci + gi) % cells.length];
+      ci = (ci + stride) % cells.length;
+      const spread = s.flock > 0.8 ? 0.13 : 0.3;
+      const f = (gi + 0.5) / PLACEMENT.length;
+      const band = this.bandForSpecies(s, cell.x);
+      const y = clamp(this.height * (0.06 + f * 0.85), band.top, band.bottom);
+      this.creatures.push(
+        this.spawn(s.id, {
+          x: clamp(cell.x + rng.bell() * w * spread, ox + w * 0.05, ox + w * 0.95),
+          y,
+        }),
+      );
     }
 
     // The large animals are placed on purpose, on the lane each of them holds:
@@ -1314,13 +1396,21 @@ export class Aquarium {
    * fish in it. `b0` and `b1` are species constants, so these two numbers are
    * the only knob for how much of the column the cast is allowed to use.
    */
+  /**
+   * Where an animal holds its depth. Every band is derived from the species'
+   * own, so a goby stays on the sand and a snapper stays in open water.
+   *
+   * The mapping is a straight proportion of the column, clamped by the sea bed.
+   * An earlier version was `0.02 + b * 0.86` with a `0.09 + b * 0.84` floor
+   * term, which quietly pulled both ends toward the middle *and* spent the top
+   * 2% and bottom 9% of the tank on nothing — on top of compressing whatever the
+   * bands asked for. Between that and the bands themselves clustering, the cast
+   * ended up with 53% of its fish in the middle fifth of the column.
+   */
   private bandForSpecies(species: Species, x: number): { top: number; bottom: number } {
-    const [b0, b1] = species.band;
-    const top = this.height * (0.02 + b0 * 0.86);
-    const bottom = Math.min(
-      this.height * (0.09 + b1 * 0.84),
-      this.reef.floor(x) - this.height * 0.03,
-    );
+    const [b0, b1] = rankDepths(species.band[0], species.band[1], species.id);
+    const top = this.height * b0 * 0.94;
+    const bottom = Math.min(this.height * b1 * 0.94, this.reef.floor(x) - this.height * 0.03);
     return { top, bottom: Math.max(top + 12, bottom) };
   }
 

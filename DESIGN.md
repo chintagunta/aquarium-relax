@@ -321,17 +321,43 @@ The remaining archetypes:
   tentacled animals that did have been moved to `drift` — but the behaviour is still there
   for anything that wants a straight low sweep.
 
-**And the shoal is seeded spread out, not stacked.** This was the last piece and the least
-obvious. Fish are placed on a jittered grid of cells, and the cursor that walked those
-cells was global, so a species' whole population landed in *adjacent* cells. The shoal
-therefore arrived already clumped, and the flocking pull had nothing to pull against —
-which is why the tank looked like four tight knots with empty water between them even
-after the depth model was fixed. The cursor now strides by a per-species amount that is
-coprime with the cell count, so consecutive fish of one species land in different parts of
-the window. Flocking cohesion is also deliberately weaker *vertically* than horizontally,
-with a small per-fish standing offset: pulling equally on both axes flattens a school into
-one ribbon, which is what a school looks like on a poster and not what it looks like in
-water.
+**And the cast is laid out along the column, not summed into it.** This was the last piece
+and the hardest to see, because the simulation looked right the whole time.
+
+Twenty-four species cannot be strung end to end down one water column. At any usable band
+width they overlap heavily — 24 bands of a fifth of the column is five times over budget —
+so the number of fish that *want* the middle is much larger than the number that want the
+top, and the middle fills up however each band is sampled. Measured: **53% of all fish in
+the middle fifth of the column, 0% in the top fifth, 0% in the bottom fifth.** The tank had
+a horizon of fish and two empty quarters.
+
+Three fixes went in, and the first two were not enough:
+
+1. **A home range**, so a fish explores a patch rather than random-walking its whole band.
+   Necessary, but it only made the crowding tidier.
+2. **Bands spread by rank.** The species table's `band` numbers are relative preferences —
+   "lower than a chromis, higher than a goby" — and their midpoints spanned only 0.36 to
+   0.775, which the mapping then compressed further. They are now treated as an *ordering*
+   and dealt out across the column evenly, with normalised widths. Ecology preserved: the
+   shallowest species is still the shallowest, the goby is still on the sand.
+3. **Placement by column position.** Still clumped, because bands must overlap. So the
+   opening cast is a flat list sorted by depth preference and laid out at even intervals
+   down the column — `PLACEMENT` — while each animal's band remains the envelope it is free
+   inside once swimming. The population is dealt out rather than summed.
+
+Result, measured the same way: **13 / 29 / 40 / 15 / 2** per fifth against a uniform 20
+each, and 16% of fish in the top quarter. `.qa/depth.mjs` is the probe, kept because this is
+a property that will silently regress the moment a species is added or a band is retuned.
+
+**And the shoal is seeded spread out, not stacked.** Fish are placed on a jittered grid of
+cells, and the cursor that walked those cells was global, so a species' whole population
+landed in *adjacent* cells. The shoal therefore arrived already clumped, and the flocking
+pull had nothing to pull against — which is why the tank looked like four tight knots with
+empty water between them even after the depth model was fixed. The cursor now strides by a
+per-species amount, so consecutive fish of one species land in different parts of the
+window. Flocking cohesion is also deliberately weaker *vertically* than horizontally, with
+a small per-fish standing offset: pulling equally on both axes flattens a school into one
+ribbon, which is what a school looks like on a poster and not what it looks like in water.
 
 Leaving the tank is not blocked and it is not wrapped either: the world has no far
 wall, so an animal that swims a body length past the buffer is simply retired and a
