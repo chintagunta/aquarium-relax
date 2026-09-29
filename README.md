@@ -1,4 +1,4 @@
-# The Reef
+# Yohans' Reef
 
 A living aquarium simulation for the browser: flat-vector reef life in the spirit of
 the reference art, with a real food chain. Click the water and the fish turn, swim
@@ -49,6 +49,9 @@ npm run dev      # http://127.0.0.1:5177
   files. It starts on your click, so browsers allow it.
 - **Field guide** lists all 26 species with a live population count and each animal's real
   adult length.
+- **Hide info** takes the name, the counters and the how-to off the glass for a tank with
+  nothing written on it. The controls stay, because that is where the button that brings the
+  words back lives.
 - Keyboard: focus the tank and press <kbd>F</kbd> or <kbd>Space</kbd> to scatter food at the
   pointer, or the arrow keys to swim.
 
@@ -189,9 +192,10 @@ measure is the display's refresh interval rather than the work.
 ## Verifying it
 
 ```bash
-npm test                          # 27 unit tests: maths, RNG, palette, budget, real scale, roster
+npm test                          # 28 unit tests: maths, RNG, palette, budget, real scale, roster
 node .qa/verify.mjs               # drives a real Chrome over the DevTools Protocol
 node .qa/feed.mjs                 # six drops in six places: does the tank actually eat?
+node .qa/chrome.mjs               # the hide switch: are the panels really off the glass?
 node .qa/profile.mjs              # the frame-budget breakdown above
 node .qa/scene.mjs name "expr"    # screenshot after running expr against the tank
 ```
@@ -211,6 +215,15 @@ screenshots plus `report.json` to `.qa/out/`.
 `.qa/feed.mjs` answers the one question a single drop cannot: it scrolls between drops, so
 it catches the class of bug where feeding works near the world origin and nowhere else.
 It fails the run if any drop is ignored or if the cast grows while scrolling.
+
+`.qa/chrome.mjs` tests the hide switch by reading computed style rather than trusting the
+class name: opacity, `visibility`, `pointer-events`, and the layout box each panel keeps
+while it is hidden. Two traps are worth knowing if you extend it. `visibility: hidden`
+does not collapse a layout box in Chrome, so "the panel is gone" must not be written as a
+zero-size test; and `getBoundingClientRect` is post-transform, so a panel that scales to
+0.98 as it retreats reports a 2% smaller box and looks like a reflow. It reads
+`offsetWidth`/`offsetHeight` for that reason, and checks the other half of the promise
+too — the controls row has to survive the hide, or there is no way back.
 
 The frame budget in that report is retried and the cheapest observation kept, because
 this machine is shared with a dev server and a browser: contention can only ever add

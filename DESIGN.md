@@ -65,6 +65,29 @@ Two deliberate choices:
 - **The hint explains feeding once** and then changes what it says after your first
   click, rather than staying a permanent instruction.
 
+### Hiding the words
+
+Everything written on the glass — the name, the three counters, the hint — answers to one
+switch, because the most common thing to want from an aquarium is to look at it with
+nothing in front of it. The controls row stays, and that is not a compromise: the button
+that brings the words back lives in it. A hide switch that hides its own undo is a trap.
+
+The panels fade and retreat toward whichever edge they sit on rather than snapping, which
+means they have to stay in the layout while hidden. `visibility: hidden` does that, keeps
+them out of the accessibility tree, and stops them swallowing clicks aimed at the water
+along with `pointer-events: none`. Three things about the implementation are less obvious
+than they look:
+
+- **The animation has to be dropped, not just overridden.** The panels enter with
+  `animation: … both`, whose filled end state is not something a single later class
+  reliably outranks. The hidden rule sets `animation: none` outright, and it is written
+  after each panel's own animation so the cascade is unambiguous rather than lucky.
+- **Without that, the entrance replays on every un-hide.** The rise-in is an entrance; run
+  it again on the way back and it reads as a glitch rather than a reveal.
+- **The layout box is intentionally not collapsed.** Verify reads `offsetWidth` rather
+  than `getBoundingClientRect`, because the panels scale to 0.98 as they retreat and a
+  post-transform box would report a reflow that never happened.
+
 ## An endless tank
 
 The tank has no far wall. It scrolls horizontally without limit, and the population is

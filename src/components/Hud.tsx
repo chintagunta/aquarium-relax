@@ -9,6 +9,7 @@ export interface HudProps {
   sound: boolean;
   night: boolean;
   fed: boolean;
+  infoHidden: boolean;
   onFeed: () => void;
   onAdd: () => void;
   onNewReef: () => void;
@@ -16,6 +17,7 @@ export interface HudProps {
   onSound: (on: boolean) => void;
   onNight: (on: boolean) => void;
   onGuide: () => void;
+  onToggleInfo: () => void;
 }
 
 const MOODS: Array<{ id: Mood; label: string; title: string }> = [
@@ -25,17 +27,25 @@ const MOODS: Array<{ id: Mood; label: string; title: string }> = [
 ];
 
 export function Hud(props: HudProps) {
-  const { meals, creatures, fps, hovered, mood, sound, night, fed } = props;
+  const { meals, creatures, fps, hovered, mood, sound, night, fed, infoHidden } = props;
 
+  // Everything that is words on the glass — the name, the numbers, the how-to —
+  // answers to one switch, so the tank can be looked at on its own. The controls
+  // never hide: the button that undoes this lives in there.
   return (
     <div className="hud">
       <div className="hud__top">
-        <div className="panel brand">
-          <h1 className="brand__title">The Reef</h1>
+        <div className={panelClass('panel brand', infoHidden)}>
+          <h1 className="brand__title">Yohans&apos; Reef</h1>
           <p className="brand__sub">A living tank. Click the water to feed them.</p>
         </div>
 
-        <div className="panel stats" role="status" aria-live="off">
+        <div
+          className={panelClass('panel stats', infoHidden)}
+          role="status"
+          aria-live="off"
+          aria-hidden={infoHidden || undefined}
+        >
           <div className="stat">
             <span className="stat__value">{meals}</span>
             <span className="stat__label">Meals</span>
@@ -52,7 +62,7 @@ export function Hud(props: HudProps) {
       </div>
 
       <div className="hud__bottom">
-        <div className="panel hint">
+        <div className={panelClass('panel hint', infoHidden)} aria-hidden={infoHidden || undefined}>
           <span className="hint__mark" aria-hidden="true">
             ✳
           </span>
@@ -125,9 +135,30 @@ export function Hud(props: HudProps) {
           <button type="button" className="btn" onClick={props.onGuide}>
             Field guide
           </button>
+          <button
+            type="button"
+            className="btn btn--quiet"
+            aria-pressed={infoHidden}
+            onClick={props.onToggleInfo}
+            title={
+              infoHidden
+                ? 'Bring back the name, the numbers and the how-to'
+                : 'Hide the words and just watch the tank'
+            }
+          >
+            <span className="btn__glyph" aria-hidden="true">
+              {infoHidden ? '☰' : '⤫'}
+            </span>
+            {infoHidden ? 'Show info' : 'Hide info'}
+          </button>
           {hovered ? <span className="hover-chip">{hovered}</span> : null}
         </div>
       </div>
     </div>
   );
+}
+
+/** One class list for the panels the hide switch owns. */
+function panelClass(base: string, hidden: boolean) {
+  return hidden ? `${base} is-hidden` : base;
 }

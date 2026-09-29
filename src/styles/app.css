@@ -1,5 +1,5 @@
 /* ==========================================================================
-   The Reef — visual tokens
+   Yohans' Reef — visual tokens
    Grounded in the reference art: a flat-vector cartoon fish tank. The interface
    is a thin pane of glass standing in front of it, so the chrome borrows the
    water's colours rather than fighting them.
@@ -163,6 +163,79 @@ body {
   font-size: 12.5px;
   color: var(--text-dim);
   line-height: 1.35;
+}
+
+/* --------------------------------------------------------------------------
+   Hiding the words
+   --------------------------------------------------------------------------
+   The brand, the stat counters and the hint all answer to one switch, so the
+   tank can be watched with nothing written on the glass. The controls row
+   deliberately stays put — that is where the switch lives.
+
+   The selectors are spelled out one panel at a time rather than grouped with
+   `.is-hidden` alone. Grouping would put the rule in the cascade wherever the
+   group sits, and these panels carry `animation: … both`, whose filled end
+   state is not something a later single class reliably beats. Naming each
+   panel keeps every override unambiguous and above its own animation.
+
+   Reaching the end state also means dropping the animation itself. With it
+   still attached, the rise-in replays every time the panels come back, which
+   reads as a glitch rather than a reveal.
+   -------------------------------------------------------------------------- */
+
+.brand.is-hidden,
+.stats.is-hidden,
+.hint.is-hidden {
+  animation: none;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: scale(0.98);
+  transition: opacity 280ms var(--ease-out), transform 280ms var(--ease-out),
+    visibility 0s linear 280ms;
+}
+
+/* Out toward whichever edge the panel sits on — up for the top row, down for
+   the hint — so the words retreat instead of just dissolving. */
+.brand.is-hidden,
+.stats.is-hidden {
+  transform: translateY(-8px) scale(0.98);
+}
+
+.hint.is-hidden {
+  transform: translateY(8px) scale(0.98);
+}
+
+/* Coming back is the same move in reverse, and wants no visibility delay. */
+.brand:not(.is-hidden),
+.stats:not(.is-hidden),
+.hint:not(.is-hidden) {
+  transition: opacity 280ms var(--ease-out), transform 280ms var(--ease-out),
+    visibility 0s;
+}
+
+/* The hide switch is quieter than the actions beside it: it changes the frame,
+   it does not do anything to the tank. */
+.btn--quiet {
+  background: transparent;
+  border-color: rgba(190, 240, 255, 0.22);
+  color: var(--text-dim);
+}
+
+.btn--quiet:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+.btn--quiet[aria-pressed='true'] {
+  color: var(--text);
+  border-color: var(--glass-edge);
+}
+
+.btn__glyph {
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.85;
 }
 
 /* ------------------------------- stats ------------------------------- */

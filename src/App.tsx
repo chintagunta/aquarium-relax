@@ -11,6 +11,7 @@ export default function App() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideCreatures, setGuideCreatures] = useState<Creature[]>([]);
   const [fedOnce, setFedOnce] = useState(false);
+  const [infoHidden, setInfoHidden] = useState(false);
   const noticeTimer = useRef(0);
 
   const onNotice = useCallback((text: string) => {
@@ -49,7 +50,7 @@ export default function App() {
   }, [getCreatures]);
 
   return (
-    <div className="app" data-light={night ? 'night' : 'day'}>
+    <div className="app" data-light={night ? 'night' : 'day'} data-chrome={infoHidden ? 'bare' : 'full'}>
       <canvas
         ref={canvasRef}
         className="tank"
@@ -68,6 +69,7 @@ export default function App() {
         sound={sound}
         night={night}
         fed={fedOnce}
+        infoHidden={infoHidden}
         onFeed={feedAtPointer}
         onAdd={() => addCreature()}
         onNewReef={newReef}
@@ -75,6 +77,7 @@ export default function App() {
         onSound={setSound}
         onNight={setNight}
         onGuide={openGuide}
+        onToggleInfo={() => setInfoHidden((v) => !v)}
       />
 
       {notice ? <div className="notice">{notice}</div> : null}
