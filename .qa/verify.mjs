@@ -78,7 +78,16 @@ class Session {
 
   async step(frames, label) {
     const t0 = Date.now();
-    await this.evaluate(`window.__reef.render(${frames})`);
+    // Chunked on purpose. One `render(240)` is a single protocol call that has
+    // to finish before anything else can be asked, and with a full cast of
+    // hunting fish a long call runs past the protocol timeout on a contended
+    // machine — which reads as "the harness broke", not "the tank is slow".
+    // Sixty-frame chunks also keep the page responsive between calls, which is
+    // how the real loop behaves.
+    const CHUNK = 60;
+    for (let done = 0; done < frames; done += CHUNK) {
+      await this.evaluate(`window.__reef.render(${Math.min(CHUNK, frames - done)})`);
+    }
     log(`stepped ${frames} frames in ${Date.now() - t0}ms (${label})`);
   }
 
@@ -150,8 +159,15 @@ const PROBE = `(() => {
 /**
  * Watches the whole cast for a while and reports how it actually moves:
  * whether the fish hold a horizontal heading, whether they swim head first,
- * whether the crossers sweep one side to the other, whether anyone is leaving
- * the tank, and how big the fish are against the tank.
+ * whether they weave vertically instead of holding one line, whether anyone is
+ * leaving the tank, and how big the fish are against the tank.
+ *
+ * The vertical numbers are tracked *per animal*, and that distinction is the
+ * whole point of them. A span taken across every fish of a kind measures how
+ * spread out the shoal is, not how much any one fish swims — an entire school
+ * holding station forever still shows a huge spread. Per-animal, `crossed`
+ * accumulates how much vertical distance that fish actually covered, so a tank
+ * of fish welded to a depth line reads near zero and the check can say so.
  */
 const MOTION = (seconds) => `(() => {
   const p = window.__reef;
@@ -161,6 +177,7 @@ const MOTION = (seconds) => `(() => {
   // heading worth the name its facing must agree with the sign of vx.
   const face = { n: 0, ok: 0 };
   let maxPitch = 0;
+  const per = new Map();
   const track = (s) => {
     for (const c of s) {
       const k = c.kind;
@@ -179,6 +196,10 @@ const MOTION = (seconds) => `(() => {
         face.n++;
         if (Math.sign(c.vx) === c.facing) face.ok++;
       }
+      let t = per.get(c.id);
+      if (!t) { t = { kind: k, top: c.y, bot: c.y, prev: c.y, crossed: 0 }; per.set(c.id, t); }
+      t.top = Math.min(t.top, c.y); t.bot = Math.max(t.bot, c.y);
+      t.crossed += Math.abs(c.y - t.prev); t.prev = c.y;
     }
   };
   track(start);
@@ -188,17 +209,34 @@ const MOTION = (seconds) => `(() => {
     track(p.sample());
   }
   const big = Math.max(...start.filter(c => c.kind === 'fish').map(c => c.bodyPx));
+  const canvasH = document.querySelector('canvas').clientHeight;
+  // Per-animal vertical behaviour, averaged over the animals that were watched
+  // for long enough to have a meaningful sample.
+  const vert = {};
+  for (const t of per.values()) {
+    if (t.crossed <= 0) continue;
+    vert[t.kind] = vert[t.kind] ?? { n: 0, range: 0, crossed: 0 };
+    vert[t.kind].n++;
+    vert[t.kind].range += t.bot - t.top;
+    vert[t.kind].crossed += t.crossed;
+  }
+  const vertical = Object.fromEntries(Object.entries(vert).map(([k, v]) => [k, {
+    n: v.n,
+    rangePct: +((100 * v.range) / v.n / canvasH).toFixed(2),
+    crossedPct: +((100 * v.crossed) / v.n / canvasH).toFixed(2),
+  }]));
   return {
     span: Object.fromEntries(Object.keys(seen).map(k => [k, {
       dx: Math.round(maxX[k] - minX[k]), dy: Math.round(maxY[k] - minY[k]),
       n: seen[k],
     }])),
+    vertical,
     levelFraction: Object.fromEntries(Object.entries(straight).map(([k, v]) => [k, +(v.level / v.n).toFixed(2)])),
     headFirst: +(face.ok / Math.max(1, face.n)).toFixed(3),
     faceSamples: face.n,
     maxPitch: +maxPitch.toFixed(2),
     biggestFishPx: Math.round(big),
-    canvasH: document.querySelector('canvas').clientHeight,
+    canvasH,
     onScreen: p.sample().filter(c => c.x > 0 && c.x < window.innerWidth).length,
     total: p.sample().length,
   };
@@ -239,6 +277,33 @@ const main = async () => {
     await sleep(500);
   }
 
+  // Anything that feeds the tank before the trusted click at the end is not the
+  // test, and the "how many crumbs get eaten" number below would be measuring
+  // somebody else's food. So the meal count is sampled at each stage and `feed`
+  // is wrapped to record who called it — the check below then reports which step
+  // it happened at and the stack that did it, instead of just a number that is
+  // not zero. (It fired exactly once while this was being written, and the
+  // evidence pointed at an orphaned tab from a previous run rather than at the
+  // tank. That is the kind of claim that needs a trail, not a guess.)
+  await session.evaluate(`(() => {
+    const r = window.__reef;
+    if (r.__trapped) return true;
+    r.__trapped = true;
+    window.__MEAL_TRAIL = [];
+    const real = r.feed;
+    r.feed = function (...args) {
+      window.__MEAL_TRAIL.push({ at: Math.round(performance.now()), args, stack: new Error().stack });
+      return real.apply(this, args);
+    };
+    return true;
+  })()`);
+
+  const trail = [];
+  const mealStep = async (label) => {
+    trail.push([label, await session.evaluate(`window.__reef.stats().meals`)]);
+  };
+  await mealStep('boot');
+
   await session.step(30, 'warm up');
   report.steps.push({ name: 'boot', ...(await session.evaluate(PROBE)) });
   report.shot1 = await session.shot('01-boot');
@@ -278,6 +343,7 @@ const main = async () => {
     });
   })`);
   log('clock jump', JSON.stringify(report.clockJump));
+  await mealStep('clockjump');
   if (report.clockJump.errors) {
     throw new Error(`a frame after a blocking call threw (${report.clockJump.errors} uncaught)`);
   }
@@ -408,6 +474,7 @@ const main = async () => {
     return { here, far };
   })()`);
   log('drawn', JSON.stringify(report.drawn));
+  await mealStep('drawn');
   for (const [where, d] of Object.entries(report.drawn)) {
     if (d.onScreen < 10) throw new Error(`only ${d.onScreen} animals on screen ${where} the scroll`);
     // The renderer must have drawn as many as the sim has in shot...
@@ -428,7 +495,41 @@ const main = async () => {
   // well inside the protocol timeout on a contended machine.
   report.motion = await session.evaluate(MOTION(6));
   log('motion', JSON.stringify(report.motion));
+  await mealStep('motion');
   report.shotMotion = await session.shot('01b-motion');
+
+  {
+    const m = report.motion;
+    if (m.headFirst < 0.9) {
+      throw new Error(`only ${m.headFirst} of ${m.faceSamples} samples swim head first`);
+    }
+    const fish = m.vertical?.fish;
+    if (!fish || fish.n < 5) {
+      throw new Error(`only ${fish ? fish.n : 0} fish were watched long enough to judge`);
+    }
+    // Free-swimming means each fish moves through the column, not that the
+    // shoal is spread across it. A fish parked on a line crosses almost none.
+    if (fish.crossedPct < 0.6) {
+      throw new Error(
+        `fish crossed only ${fish.crossedPct}% of the tank height in ${6}s — they are holding one line`,
+      );
+    }
+    // ...and level travel means it is still going somewhere while it does it.
+    if (fish.crossedPct > 25) {
+      throw new Error(`fish crossed ${fish.crossedPct}% of the tank height in ${6}s — that is milling, not swimming`);
+    }
+    const level = m.levelFraction?.fish ?? 0;
+    if (level < 0.6) {
+      throw new Error(`only ${level} of fish motion is horizontal — they are climbing more than swimming`);
+    }
+    for (const [kind, v] of Object.entries(m.vertical ?? {})) {
+      if (v.n < 5 || kind === 'fish') continue;
+      // Everything that swims should be swimming, not standing in the water.
+      if (v.crossedPct < 0.08) {
+        throw new Error(`${kind} crossed only ${v.crossedPct}% of the tank height in ${6}s`);
+      }
+    }
+  }
 
   // ---- after dark
   await session.evaluate(`(() => {
@@ -467,6 +568,7 @@ const main = async () => {
     if (now === 'day') break;
   }
   await session.step(20, 'dawn');
+  await mealStep('dawn');
 
   // ---- a real trusted click, exactly like a visitor dropping food.
   // `buttons` matters: without it Chrome can synthesise repeat presses and the
@@ -478,8 +580,10 @@ const main = async () => {
   // measuring somebody else's food.
   const beforeClick = await session.evaluate(PROBE);
   if (beforeClick.meals !== 0 || beforeClick.pellets !== 0) {
+    const feedTrail = await session.evaluate(`JSON.stringify(window.__MEAL_TRAIL || [])`);
     throw new Error(
-      `the tank was not empty before the click: ${beforeClick.meals} meals, ${beforeClick.pellets} crumbs`,
+      `the tank was not empty before the click: ${beforeClick.meals} meals, ${beforeClick.pellets} crumbs; ` +
+        `step trail ${JSON.stringify(trail)}; feed trail ${feedTrail}`,
     );
   }
   await session.send('Input.dispatchMouseEvent', { ...AT, type: 'mouseMoved', button: 'none', buttons: 0 });

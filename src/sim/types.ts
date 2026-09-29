@@ -226,10 +226,34 @@ export interface Creature {
   tx: number;
   ty: number;
   txTime: number;
-  /** Depth it is holding on this leg of its crossing, in px. */
-  laneY: number;
-  /** Depth it is heading for at the far side of the tank, in px. */
-  laneEndY: number;
+  /**
+   * The depth it is working its way toward, in px — the centre of its bobbing.
+   * Not a lane it is pinned to: a fish replaces this every few seconds and
+   * swims a slow diagonal to the new one while still travelling sideways.
+   */
+  holdY: number;
+  /**
+   * Where it settled when it arrived, in px — the middle of its home range.
+   * Without this the depth target is an unanchored random walk, and over a few
+   * minutes it fills the entire band: the fish ends up commuting from the
+   * surface to the sand, which is the opposite of free-swimming.
+   */
+  homeY: number;
+  /** Bob phase, radians. Allocates the vertical sine's phase the way `tint` does. */
+  bob: number;
+  /** Bob period, seconds — an individual's, not a species constant. */
+  bobRate: number;
+  /** Seconds until it commits to a new depth. */
+  wander: number;
+  /** Peak bob amplitude for this individual, px. */
+  amp: number;
+  /**
+   * This individual's standing depth offset from its shoal's centre, px. Keeps
+   * a school a loose crowd rather than a flat ribbon.
+   */
+  off: number;
+  /** How fast it settles onto a new depth, px/sec. Band-relative, see `VERTICAL`. */
+  climb: number;
   /** Per-individual hue-ish tweak (index into palette swap). */
   tint: number;
   /** Depth at which `palette` was last recomputed — tints are not free. */

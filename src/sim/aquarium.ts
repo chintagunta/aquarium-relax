@@ -61,6 +61,48 @@ const POPULATE = 0.24;
 const CULL = 0.62;
 
 /**
+ * How each motion archetype moves through the water column.
+ *
+ * `amp` is the bob's peak, as a fraction of the species band's height, and
+ * `climb` is how fast the fish settles onto a new depth over the same band —
+ * both band-relative, so the same numbers produce a small move for a species
+ * with a narrow band and a long commute for one with a wide band.
+ *
+ * The distinctions are behavioural, not decorative. A hoverer like the
+ * cardinalfish barely leaves its mark: a couple of percent of its band, taken
+ * slowly, so it reads as holding station. A cruiser weaves a good fraction of
+ * its band and covers ground, which is the difference between a fish that lives
+ * somewhere and a fish that is going somewhere. Dart resamples its depth around
+ * twice as often as anything else, because a damselfish genuinely cannot make up
+ * its mind.
+ *
+ * There is a coupling here that is easy to miss and was measured before it was
+ * believed. Vertical speed is `amp x omega`, and `amp` is a fraction of the band
+ * while omega is absolute — so a big fish in a wide band weaves *faster* than it
+ * swims, which is how a fish ends up travelling more up than along. Both `amp`
+ * and the bob frequency are therefore kept low on purpose: a slow, wide weave
+ * covers the same ground as a fast, tight one and reads as a fish rather than a
+ * leaf falling sideways. The level-fraction check in .qa/verify.mjs is what
+ * caught this; it is 0.72, and it is not decoration.
+ *
+ * `roam` is how far either side of its home depth a fish will take itself — the
+ * length of the line it works along. It is the knob that decides whether the
+ * tank looks like a reef or like an aquarium, and it is per-archetype because
+ * "wanders far" and "wanders much" are different behaviours.
+ */
+const VERTICAL: Record<
+  Species['motion'],
+  { amp: number; bob: [number, number]; climb: number; wander: [number, number]; roam: number }
+> = {
+  cruise: { amp: 0.15, bob: [0.13, 0.25], climb: 0.03, wander: [5, 13], roam: 0.42 },
+  dart: { amp: 0.1, bob: [0.18, 0.34], climb: 0.034, wander: [2.5, 7], roam: 0.34 },
+  hover: { amp: 0.03, bob: [0.1, 0.2], climb: 0.014, wander: [9, 20], roam: 0.18 },
+  glide: { amp: 0.16, bob: [0.1, 0.19], climb: 0.016, wander: [7, 17], roam: 0.44 },
+  predator: { amp: 0.2, bob: [0.1, 0.18], climb: 0.026, wander: [6, 15], roam: 0.5 },
+  school: { amp: 0.12, bob: [0.16, 0.3], climb: 0.032, wander: [4, 11], roam: 0.38 },
+};
+
+/**
  * A rare animal's diary. It is not part of the standing population: it turns up
  * on its own schedule, crosses the window it arrives into and leaves, so that a
  * shark or a mermaid stays an event instead of becoming furniture.
@@ -289,10 +331,18 @@ export class Aquarium {
       // swum to, and dragging them all back to the origin on a resize would
       // empty the water in front of the viewer.
       c.y = clamp(c.y, height * 0.05, this.reef.floor(c.x) - height * 0.02);
-      // lanes are in pixels and derived from the old height — rebuild them
+      // Vertical state is in pixels and derived from the old height, so it is
+      // rebuilt rather than scaled: the bob amplitude is a fraction of a band
+      // that has just changed size, and a stale amplitude would be a fish
+      // weaving out of its own band until the next depth decision.
       const band = this.bandFor(c);
-      c.laneY = clamp(c.y, band.top, band.bottom);
-      c.laneEndY = clamp(c.laneY, band.top, band.bottom);
+      const h = band.bottom - band.top;
+      const v = VERTICAL[c.species.motion];
+      const amp = clamp(c.amp, h * v.amp * 0.6, h * v.amp * 1.5);
+      c.holdY = clamp(c.y, band.top + amp, band.bottom - amp);
+      c.homeY = c.holdY;
+      c.amp = amp;
+      c.climb = Math.max(2, h * v.climb);
     }
     for (const p of this.pellets) {
       p.x = clamp(p.x, 4, width - 4);
@@ -338,11 +388,18 @@ export class Aquarium {
     }
 
     let ci = 0;
-    for (const s of fish) {
-      // One screen's worth: the margins beyond it are filled by the spawner.
+    for (let si = 0; si < fish.length; si++) {
+      const s = fish[si];
+      // The cursor advances by a stride that is coprime-ish with the cell count
+      // and offset per species, so consecutive fish of one species land in
+      // *different* parts of the window. Filling cells in order put a whole
+      // species in neighbouring cells, which is why a shoal used to arrive
+      // already clumped and never spread out again: the flocking pull then had
+      // nothing to pull against.
+      const stride = 7 + si * 3;
       for (let i = 0; i < s.population; i++) {
-        const cell = cells[ci % cells.length];
-        ci++;
+        const cell = cells[(ci + si) % cells.length];
+        ci = (ci + stride) % cells.length;
         const spread = s.flock > 0.8 ? 0.13 : 0.3;
         this.creatures.push(
           this.spawn(s.id, {
@@ -449,11 +506,19 @@ export class Aquarium {
       tx: x,
       ty: y,
       txTime: rng.range(0, 3),
-      laneY: y,
-      laneEndY: clamp(
-        y + rng.bell() * this.height * 0.3 * (species.travel === 'cross' ? 1 : 0.4),
-        band.top,
-        band.bottom,
+      // Vertical individuality: a phase and a slight period spread, so a shoal
+      // weaves as a group without ever marching in lockstep. Two fish sharing a
+      // phase exactly is the tell that turns a school into a screensaver.
+      holdY: y,
+      homeY: y,
+      bob: rng.range(0, TAU),
+      bobRate: rng.range(...VERTICAL[species.motion].bob),
+      wander: rng.range(0, 4),
+      amp: (band.bottom - band.top) * VERTICAL[species.motion].amp * rng.range(0.7, 1.35),
+      off: rng.bell() * this.height * (species.flock > 0.05 ? 0.045 : 0.02),
+      climb: Math.max(
+        2,
+        (band.bottom - band.top) * VERTICAL[species.motion].climb * rng.range(0.75, 1.3),
       ),
       tint: rng.next(),
       tintDepth: -1,
@@ -930,11 +995,15 @@ export class Aquarium {
       if (n > 0) {
         const coh = 0.6 * flock;
         const ali = 0.5 * flock;
+        // Cohesion is deliberately weakened *vertically*, and each fish carries
+        // its own small depth offset. Pulling equally on both axes flattens a
+        // shoal into one horizontal band — which is what a school of fish looks
+        // like on a poster, and not what it looks like in water.
         dx += ((cx / n - c.x) / (r || 1)) * coh * 2 + sx;
-        dy += ((cy / n - c.y) / (r || 1)) * coh * 2 + sy;
+        dy += ((cy / n + c.off - c.y) / (r || 1)) * coh * 1.1 + sy;
         const mag = Math.hypot(ax, ay) || 1;
         dx += (ax / mag) * ali;
-        dy += (ay / mag) * ali;
+        dy += (ay / mag) * ali * 0.8;
       }
     }
     void dt;
@@ -1235,14 +1304,21 @@ export class Aquarium {
   /* -------------------------- shared helpers -------------------------- */
 
   /**
-   * Where an animal holds its depth. Every lane is derived from the species'
-   * band, so a goby stays on the sand and a snapper stays in open water.
+   * Where an animal holds its depth. Every band is derived from the species'
+   * own, so a goby stays on the sand and a snapper stays in open water.
+   *
+   * The mapping deliberately spreads the species across the *whole* column. An
+   * earlier version topped out at 80% of the tank height, which left the upper
+   * quarter permanently empty — with every fish's home range sitting below the
+   * midline, the tank read as a crowd near the sand rather than as water with
+   * fish in it. `b0` and `b1` are species constants, so these two numbers are
+   * the only knob for how much of the column the cast is allowed to use.
    */
   private bandForSpecies(species: Species, x: number): { top: number; bottom: number } {
     const [b0, b1] = species.band;
-    const top = this.height * (0.05 + b0 * 0.75);
+    const top = this.height * (0.02 + b0 * 0.86);
     const bottom = Math.min(
-      this.height * (0.1 + b1 * 0.82),
+      this.height * (0.09 + b1 * 0.84),
       this.reef.floor(x) - this.height * 0.03,
     );
     return { top, bottom: Math.max(top + 12, bottom) };
@@ -1253,30 +1329,41 @@ export class Aquarium {
   }
 
   /**
-   * The traffic system. Fish hold a roughly level lane and travel left or
-   * right; jellies, squid and the mermaid run a shallow diagonal lane across
-   * the lower tank. Nothing is tied to a spot in the middle, so the water
-   * reads as a slice of open ocean rather than a box with walls.
+   * The traffic system — how an animal picks the depth it is holding.
+   *
+   * Nothing here pins an animal to a line. A fish carries a depth it is working
+   * toward (`holdY`) and a bob phase of its own, and it moves between depths the
+   * way a real reef fish does: mostly a small vertical weave while it travels,
+   * and every few seconds a decision to be somewhere else in the column, taken
+   * as a long slow diagonal rather than a step. The effect is a shoal that
+   * wanders the water freely while each species keeps to the part of the column
+   * it belongs in — a goby stays near the sand, a snapper stays in open water —
+   * because the species band is enforced as an envelope on where it may *go*,
+   * not as a corridor it is glued to.
+   *
+   * Still horizontal, though. Level travel is what makes the water read as a
+   * slice of ocean rather than a bowl of fish milling about, so the climb is
+   * deliberately gentle: over a whole leg, sideways distance dominates.
    */
   private travel(c: Creature, dt: number): void {
     const s = c.species;
     const band = this.bandFor(c);
     c.txTime -= dt;
+    c.wander -= dt;
 
-    if (c.txTime <= 0) {
+    if (s.travel === 'drift') {
+      // Tentacle propulsion keeps its own model: a long arc around the depth the
+      // animal is holding, with the intent deciding how hard it pushes along it.
+      const arc = Math.sin(this.time * 0.34 + c.tint * TAU);
+      c.ty = clamp(c.holdY + arc * (c.amp + this.height * 0.06), band.top, band.bottom);
+    } else if (c.txTime <= 0) {
       c.txTime = this.rng.range(3.5, 9);
-      if (s.travel === 'cross') {
-        // Aim the far end of the lane somewhere else in the band, reflecting
-        // off the edges so the sweeps zig-zag instead of all sinking.
-        let next = c.laneEndY + this.rng.bell() * this.height * 0.3;
-        if (next < band.top) next = band.top + (band.top - next);
-        if (next > band.bottom) next = band.bottom - (next - band.bottom);
-        c.laneEndY = clamp(next, band.top, band.bottom);
-      } else if (this.rng.chance(0.16)) {
-        c.flip = -c.flip; // a change of mind: it turns and goes back
-      } else {
-        c.laneY = clamp(c.laneY + this.rng.bell() * this.height * 0.18, band.top, band.bottom);
-      }
+      // A change of mind is also the natural moment to change depth: a fish
+      // that turns around is already somewhere new in the column, and it should
+      // leave the returning lane at a different height rather than retrace it.
+      const turning = this.rng.chance(0.16);
+      if (turning) c.flip = -c.flip;
+      if (turning || c.wander <= 0) this.pickDepth(c, band);
     }
 
     c.tx = c.x + c.flip * this.width * 0.5;
@@ -1290,17 +1377,49 @@ export class Aquarium {
       // lane and the arch it sweeps disappears.
       const p = clamp((c.x - this.view.x) / Math.max(1, this.width), 0, 1);
       const arch = Math.sin(p * Math.PI) * this.height * 0.05 * Math.sin(c.tint * TAU);
-      c.ty = clamp(lerp(c.laneY, c.laneEndY, p) + arch, band.top, band.bottom);
-    } else if (s.travel === 'drift') {
-      // Tentacle propulsion: down, then up, then sideways. The lane itself
-      // rises and falls in a long slow arc around where the animal was put,
-      // and the intent only decides how hard it pushes along that arc.
-      const swing = c.laneEndY - c.laneY;
-      const arc = Math.sin(this.time * 0.34 + c.tint * TAU);
-      c.ty = clamp(c.laneY + swing * arc * 0.5 + arc * this.height * 0.1, band.top, band.bottom);
+      c.ty = clamp(lerp(c.holdY, c.holdY + c.climb * 4, p) + arch, band.top, band.bottom);
     } else {
-      c.ty = c.laneY + Math.sin(this.time * 0.4 + c.tint * TAU) * this.height * 0.014;
+      // The free case: weave around the depth being held. Two sines at
+      // incommensurable rates, so the weave never repeats on a visible cycle
+      // and a shoal does not bob in unison.
+      const weave =
+        Math.sin(this.time * c.bobRate + c.bob) * c.amp +
+        Math.sin(this.time * c.bobRate * 0.41 + c.bob * 1.7) * c.amp * 0.35;
+      c.ty = clamp(c.holdY + weave, band.top, band.bottom);
     }
+  }
+
+  /**
+   * Commit to a new depth: somewhere else inside its home range, reached slowly.
+   *
+   * This is the part that makes the movement read as free rather than as a lane.
+   * The fish does not step to a new line — it picks a level and climbs to it
+   * over several seconds, which is the long diagonal you see in a real tank when
+   * a fish decides the other side of the rock looks better.
+   *
+   * The step is bounded twice over. Once by the species band, so a goby cannot
+   * end up in open water; and once by a home range around wherever the fish
+   * arrived, so it explores its own patch of the column instead of random-
+   * walking across the whole band over a few minutes. The bob amplitude is
+   * subtracted as well, so the whole weave stays inside the band and a fish near
+   * an edge flattens out rather than being clipped mid-weave.
+   */
+  private pickDepth(c: Creature, band: { top: number; bottom: number }): void {
+    const h = band.bottom - band.top;
+    const v = VERTICAL[c.species.motion];
+    const roam = h * v.roam;
+    let lo = Math.max(band.top + c.amp, c.homeY - roam);
+    let hi = Math.min(band.bottom - c.amp, c.homeY + roam);
+    if (hi - lo < c.amp * 2) {
+      // A home range squeezed to nothing — a goby pinned to the sand, or a
+      // window so small the band is a sliver. Fall back to the band, which is
+      // always at least 12px tall, rather than to an inverted range.
+      lo = Math.min(band.top + c.amp, band.bottom - c.amp);
+      hi = Math.max(band.top + c.amp, band.bottom - c.amp);
+    }
+    c.holdY = clamp(lo + this.rng.next() * (hi - lo), Math.min(lo, hi), Math.max(lo, hi));
+    const w = v.wander;
+    c.wander = this.rng.range(w[0], w[1]);
   }
 
   /** Animals that live on the sea bed rather than choosing a depth. */
@@ -1438,8 +1557,12 @@ export class Aquarium {
     const c = this.spawn(s.id, { x, y: this.height * 0.5 });
     c.flip = dir;
     c.facing = dir;
-    c.laneY = clamp(c.y, this.bandFor(c).top, this.bandFor(c).bottom);
-    c.laneEndY = clamp(c.laneY + this.rng.bell() * this.height * 0.16, this.bandFor(c).top, this.bandFor(c).bottom);
+    const inBand = this.bandFor(c);
+    c.holdY = clamp(c.y, inBand.top, inBand.bottom);
+    // An arrival is already on a heading and already somewhere in the column;
+    // it gets a fresh leg so it does not immediately reverse or dive.
+    c.wander = this.rng.range(3, 9);
+    c.txTime = c.wander;
     const speed = s.baseSpeed * (this.height / 800);
     c.vx = dir * speed;
     c.vy = 0;
@@ -1486,10 +1609,11 @@ export class Aquarium {
       const c = this.incoming(s);
       // It swims a long, slow, almost level line, rising and dipping a little.
       const band = this.bandFor(c);
-      c.laneY = clamp(this.height * this.rng.range(g.lane[0], g.lane[1]), band.top, band.bottom);
-      c.laneEndY = clamp(c.laneY + this.rng.bell() * this.height * 0.18, band.top, band.bottom);
-      c.y = c.laneY;
+      c.holdY = clamp(this.height * this.rng.range(g.lane[0], g.lane[1]), band.top + c.amp, band.bottom - c.amp);
+      c.homeY = c.holdY;
+      c.y = c.holdY;
       c.txTime = this.rng.range(6, 10);
+      c.wander = c.txTime;
       this.creatures.push(c);
       g.c = c;
       this.onNotice?.(g.notice);

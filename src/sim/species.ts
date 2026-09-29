@@ -1,4 +1,4 @@
-import type { Species } from '../sim/types';
+﻿import type { Species } from '../sim/types';
 
 /* ------------------------------------------------------------------ *
  * Behaviour profiles per motion archetype. Species override the numbers
@@ -26,7 +26,7 @@ const MOTION: Record<Species['motion'], MotionProfile> = {
  *
  * Every species declares its typical adult length in centimetres, and its
  * drawn size is derived from that. The cast spans a royal gramma at 8 cm to a
- * blue whale at 2400 cm — a 300x range. Drawn literally the gramma would be
+ * blue whale at 2400 cm â€” a 300x range. Drawn literally the gramma would be
  * three pixels across and the whale would be forty screens long, so the range
  * is compressed by an exponent. That preserves the *order* and the feel of the
  * real proportions while leaving every animal legible, and it is a single
@@ -41,7 +41,7 @@ const SIZE_AT_8CM = 0.03;
 export const SIZE_EXP = 0.7;
 /**
  * Ceiling on the drawn size, in tank units. The exponent alone still leaves a
- * blue whale at 1.6 units — wider than the tank is tall, so it covers the whole
+ * blue whale at 1.6 units â€” wider than the tank is tall, so it covers the whole
  * frame and stops reading as an animal. The clamp is a second, stronger
  * compression applied to the one species that needs it; the field guide still
  * reports the real 24 metres.
@@ -202,7 +202,7 @@ export const SPECIES: Species[] = [
     },
     realCm: 8, pattern: 'saddle', weight: 0.017, eyeScale: 1.05,
     colors: { body: '#ff7d3c', belly: '#ffb07a', fin: '#f9642b', accent: '#fff1e0', pattern: '#fff8f0', outline: '#63300c' },
-    band: [0.3, 0.8], motion: 'dart', appetite: 1, population: 4, shadow: 0.85, flock: 0.3,
+    band: [0.3, 0.8], motion: 'dart', appetite: 1, population: 2, shadow: 0.85, flock: 0.3,
   }),
   species({
     id: 'goby-sand',
@@ -282,7 +282,7 @@ export const SPECIES: Species[] = [
     },
     realCm: 30, pattern: 'patches', weight: 0.016, eyeScale: 1,
     colors: { body: '#2fb39a', belly: '#a8f0dd', fin: '#1d8f86', accent: '#ffe9a8', pattern: '#12685f', outline: '#0a3b38' },
-    band: [0.28, 0.78], motion: 'cruise', appetite: 0.9, population: 3, shadow: 1.05, flock: 0.8,
+    band: [0.28, 0.78], motion: 'cruise', appetite: 0.9, population: 2, shadow: 1.05, flock: 0.8,
   }),
   species({
     id: 'hogfish-tiger',
@@ -299,6 +299,175 @@ export const SPECIES: Species[] = [
     realCm: 25, pattern: 'tiger', weight: 0.017, eyeScale: 1,
     colors: { body: '#ff8f6b', belly: '#ffd2be', fin: '#f26a48', accent: '#fff2e6', pattern: '#fff4ea', outline: '#5f2313' },
     band: [0.4, 0.84], motion: 'cruise', appetite: 0.9, population: 2, shadow: 0.95, flock: 0.2,
+  }),
+
+  /* ------------------------- more reef fish -------------------------- *
+   * A second wave, chosen so the tank reads as a reef rather than as one
+   * shoal recoloured. Every body plan here is a different silhouette from
+   * everything above it: a deep disc, a slender pencil, a long snout, a
+   * swallowtail, a big silver slab. Between them they also cover the tail
+   * shapes and patterns that no earlier fish used, so the water at a glance
+   * has more than one thing in it.
+   * ------------------------------------------------------------------ */
+  species({
+    id: 'sweep-copper',
+    kind: 'fish',
+    label: 'Copper sweep',
+    note: 'A deep-bodied scrapper. Turns side-on to look twice its size.',
+    body: {
+      rig: 'fish',
+      shape: {
+        hh: 0.56, peak: 0.36, tip: 0.78, ped: 0.12, tail: 0.34, tailKind: 'crescent',
+        dorsal: 0.62, anal: 0.44, pect: 0.28, eye: 0.085, snout: 0.11, mouth: 'tiny',
+      },
+    },
+    realCm: 22, pattern: 'plain', weight: 0.015, eyeScale: 1,
+    colors: { body: '#c9722c', belly: '#eda861', fin: '#8a4718', accent: '#ffe0a8', pattern: '#6d340e', outline: '#3f1c05' },
+    band: [0.24, 0.8], motion: 'glide', appetite: 0.8, population: 3, shadow: 1.1, flock: 0.7,
+  }),
+  species({
+    id: 'anthias-thread',
+    kind: 'fish',
+    label: 'Threadfin anthias',
+    note: 'Hangs in the current in a loose orange cloud.',
+    body: {
+      rig: 'fish',
+      shape: {
+        hh: 0.34, peak: 0.44, tip: 0.88, ped: 0.1, tail: 0.32, tailKind: 'lunate',
+        dorsal: 0.58, anal: 0.3, pect: 0.28, eye: 0.09, snout: 0.1, mouth: 'tiny',
+      },
+    },
+    realCm: 12, pattern: 'patches', weight: 0.016, eyeScale: 1.05,
+    colors: { body: '#ff9a3d', belly: '#ffc98f', fin: '#e8622f', accent: '#fff0c2', pattern: '#c93b8a', outline: '#5c2109' },
+    band: [0.2, 0.66], motion: 'hover', appetite: 0.9, population: 2, shadow: 0.8, flock: 0.9,
+  }),
+  species({
+    id: 'blenny-rock',
+    kind: 'fish',
+    label: 'Rock blenny',
+    note: 'Perches on a rock, watches you, then shoots off sideways.',
+    body: {
+      rig: 'fish',
+      shape: {
+        hh: 0.26, peak: 0.5, tip: 0.96, ped: 0.08, tail: 0.22, tailKind: 'fan',
+        dorsal: 0.3, anal: 0.2, pect: 0.24, eye: 0.09, snout: 0.13, mouth: 'pout',
+      },
+    },
+    realCm: 12, pattern: 'dots', weight: 0.016, eyeScale: 1.15,
+    colors: { body: '#7a6a54', belly: '#c3b49b', fin: '#5c4e3c', accent: '#ffe08a', pattern: '#3f3527', outline: '#241c12' },
+    band: [0.44, 0.9], motion: 'hover', appetite: 0.75, population: 2, shadow: 0.8, flock: 0.15,
+  }),
+  species({
+    id: 'sweetlips-grey',
+    kind: 'fish',
+    label: 'Grey sweetlips',
+    note: 'Big-lipped, unhurried, and much too dignified to hurry.',
+    body: {
+      rig: 'fish',
+      shape: {
+        hh: 0.38, peak: 0.42, tip: 0.88, ped: 0.11, tail: 0.3, tailKind: 'round',
+        dorsal: 0.48, anal: 0.3, pect: 0.3, eye: 0.08, snout: 0.2, mouth: 'pout',
+      },
+    },
+    realCm: 45, pattern: 'stripes', weight: 0.022, eyeScale: 1,
+    colors: { body: '#b9b6a6', belly: '#efeee4', fin: '#8f8c7c', accent: '#ffe9a8', pattern: '#4a4638', outline: '#2d2b21' },
+    band: [0.24, 0.7], motion: 'cruise', appetite: 0.8, population: 2, shadow: 1.15, flock: 0.35,
+  }),
+  species({
+    id: 'filefish-jade',
+    kind: 'fish',
+    label: 'Jade filefish',
+    note: 'Leathery and angular, and it never quite swims straight.',
+    body: {
+      rig: 'fish',
+      shape: {
+        hh: 0.4, peak: 0.44, tip: 0.84, ped: 0.1, tail: 0.3, tailKind: 'round',
+        dorsal: 0.56, anal: 0.34, pect: 0.26, eye: 0.08, snout: 0.18, mouth: 'beak',
+      },
+    },
+    realCm: 20, pattern: 'patches', weight: 0.017, eyeScale: 1,
+    colors: { body: '#4fa886', belly: '#b6e8d0', fin: '#2f7d63', accent: '#e8fff0', pattern: '#1f5a48', outline: '#123328' },
+    band: [0.32, 0.82], motion: 'hover', appetite: 0.85, population: 2, shadow: 0.85, flock: 0.1,
+  }),
+  species({
+    id: 'squirrelfish-red',
+    kind: 'fish',
+    label: 'Red squirrelfish',
+    note: 'Enormous eye, nocturnal, and up far earlier than it would like.',
+    body: {
+      rig: 'fish',
+      shape: {
+        hh: 0.33, peak: 0.44, tip: 0.92, ped: 0.1, tail: 0.3, tailKind: 'fork',
+        dorsal: 0.42, anal: 0.24, pect: 0.28, eye: 0.13, snout: 0.12, mouth: 'frown',
+      },
+    },
+    realCm: 25, pattern: 'stripes', weight: 0.018, eyeScale: 1.3,
+    colors: { body: '#e2402c', belly: '#ff9a7a', fin: '#b82a1c', accent: '#ffe0c0', pattern: '#ffd9c9', outline: '#5c1108' },
+    band: [0.3, 0.78], motion: 'cruise', appetite: 0.9, population: 2, shadow: 0.9, flock: 0.3,
+  }),
+  species({
+    id: 'pipefish-banded',
+    kind: 'fish',
+    label: 'Banded pipefish',
+    note: 'A fish drawn with a ruler. Drifts wherever the water takes it.',
+    body: {
+      rig: 'fish',
+      shape: {
+        hh: 0.2, peak: 0.5, tip: 0.96, ped: 0.06, tail: 0.18, tailKind: 'fan',
+        dorsal: 0.36, anal: 0.16, pect: 0.2, eye: 0.1, snout: 0.24, mouth: 'tiny',
+      },
+    },
+    realCm: 15, pattern: 'bars', weight: 0.017, eyeScale: 1.15,
+    colors: { body: '#e2a83a', belly: '#f7dda0', fin: '#c98a20', accent: '#fff4d0', pattern: '#2f4f8f', outline: '#4a2f08' },
+    band: [0.3, 0.82], motion: 'glide', appetite: 0.7, population: 2, shadow: 0.6, flock: 0.2,
+  }),
+  species({
+    id: 'sergeant-fiveband',
+    kind: 'fish',
+    label: 'Fiveband sergeant',
+    note: 'Five bars and a bad temper. Chases anything its own size.',
+    body: {
+      rig: 'fish',
+      shape: {
+        hh: 0.4, peak: 0.42, tip: 0.88, ped: 0.11, tail: 0.28, tailKind: 'fork',
+        dorsal: 0.5, anal: 0.3, pect: 0.3, eye: 0.08, snout: 0.12, mouth: 'grin',
+      },
+    },
+    realCm: 18, pattern: 'bars', weight: 0.018, eyeScale: 1,
+    colors: { body: '#dfe6c4', belly: '#fbfde8', fin: '#c2cba0', accent: '#ffe9a8', pattern: '#232833', outline: '#1a1d26' },
+    band: [0.22, 0.74], motion: 'school', appetite: 1, population: 4, shadow: 0.95, flock: 1.2,
+  }),
+  species({
+    id: 'neon-bluegreen',
+    kind: 'fish',
+    label: 'Blue-green damsel',
+    note: 'Tiny, electric, and completely unbothered by anything bigger.',
+    body: {
+      rig: 'fish',
+      shape: {
+        hh: 0.32, peak: 0.42, tip: 0.9, ped: 0.09, tail: 0.26, tailKind: 'fork',
+        dorsal: 0.44, anal: 0.24, pect: 0.28, eye: 0.095, snout: 0.1, mouth: 'tiny',
+      },
+    },
+    realCm: 8, pattern: 'dots', weight: 0.016, eyeScale: 1.1,
+    colors: { body: '#1fb3c9', belly: '#a8f2ff', fin: '#0f8fa8', accent: '#e0feff', pattern: '#0a6a80', outline: '#053a49' },
+    band: [0.16, 0.62], motion: 'dart', appetite: 1, population: 4, shadow: 0.7, flock: 0.8,
+  }),
+  species({
+    id: 'angelfish-royal',
+    kind: 'fish',
+    label: 'Royal angelfish',
+    note: 'Scarce, shy, and the best-dressed animal on the reef.',
+    body: {
+      rig: 'fish',
+      shape: {
+        hh: 0.48, peak: 0.38, tip: 0.8, ped: 0.13, tail: 0.36, tailKind: 'crescent',
+        dorsal: 0.6, anal: 0.4, pect: 0.28, eye: 0.08, snout: 0.14, mouth: 'pout',
+      },
+    },
+    realCm: 30, pattern: 'tiger', weight: 0.019, eyeScale: 1,
+    colors: { body: '#2f4fc4', belly: '#a8bcff', fin: '#1f3a9e', accent: '#ffd23f', pattern: '#f2e6a8', outline: '#101d5c' },
+    band: [0.26, 0.76], motion: 'hover', appetite: 0.85, population: 2, shadow: 1, flock: 0.15,
   }),
 
   /* --------------------------- cephalopods --------------------------- */

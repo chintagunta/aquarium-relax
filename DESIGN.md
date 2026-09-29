@@ -236,6 +236,27 @@ smallest fish are drawn with body, tail, dorsal and eye and nothing else. And th
 is capped at the geometric mean of the viewport, so a portrait phone does not inflate a
 170 cm mermaid to a third of the screen width.
 
+## The cast, and why it is that long
+
+Twenty-four reef fish, and the second wave of ten was chosen on a rule rather than by taste:
+**every new fish had to be a silhouette that did not already exist.** The first fourteen
+covered a lot of colour but only a few body plans — a deep disc, a slim wrasse, a round
+damselfish — and a tank full of one shape recoloured reads as a shoal, not as a reef.
+
+So the additions are a deep-bodied sweep, a slender anthias, a pencil-thin blenny that
+perches, a big-lipped sweetlips, an angular filefish, a big-eyed squirrelfish, a
+snout-first pipefish, a barred sergeant, another damselfish at the small end and a
+swallowtail angelfish. Between them they use the tail shapes and marking patterns no
+earlier fish had touched — crescent, pennant, lunate; tiger, saddle, false-eye — so the
+variety is in outline and anatomy as well as in colour. The roster tests assert the size
+ordering and the spread, and `species numbers are sane` keeps every new entry inside the
+ranges the renderer and the simulation can actually honour.
+
+The population count was raised far less than the species count. Forty-nine fish became
+sixty-four across twenty-four species rather than eighty-one, because the point was variety
+and not biomass: doubling the fish to go with the extra species made the tank look stocked
+rather than alive.
+
 ## Motion
 
 Motion here is the subject, not decoration, so the discipline is the opposite of a
@@ -254,30 +275,69 @@ leads the body with a lag, jellyfish only gain speed at the top of the bell
 contraction, the squid jets in bursts, weed sways on two sine frequencies, and the
 light shafts drift on a 45-second cycle.
 
-**Direction is a lane, not a target.** The first version gave every animal a random
-wander target a short distance away, which made the whole tank mill about in the
-middle like a bag of marbles. Now each animal holds a *lane* — a depth — and travels
-along it:
+**Depth is a home range, not a lane.** The first version gave every animal a random
+wander target a short distance away, which made the whole tank mill about in the middle
+like a bag of marbles. The second gave each animal a *lane*: a level depth inside the
+species' band, drifting slowly, occasionally turning around. That fixed the milling and
+introduced a subtler problem — every fish sat on a rail. A lane read as a fish on a
+conveyor belt, and the water looked like a diagram of a water column.
 
-- `swim` (most things): a level lane inside the species' depth band, drifting up or
-  down slowly, occasionally changing its mind and turning around. Fish stream left to
-  right and right to left.
-- `drift` (octopus, squid, both jellies, the mermaid): the same sideways journey, but
-  the lane itself climbs and sinks in long arcs — down, then up, then sideways — and
-  the animal is driven along it by its own propulsion, which is what makes the motion
-  read as *pushing* rather than as gliding: the jelly only gains speed at the top of
-  the bell contraction, the squid and the octopus leave in jets and glide between them,
-  the mermaid rises on each stretch of her tail. Measured over a minute, a drifter
-  covers a median 157px of depth and 862px of ground.
+What replaced it keeps the useful half of the lane and drops the rail. A fish carries a
+depth it is working toward and a bob phase of its own:
+
+- **It weaves while it travels.** Two slow sines per fish, at incommensurable rates and a
+  per-individual phase, so a shoal moves as a group without ever marching in lockstep.
+- **It commits to a new depth every few seconds.** Not a step — a level it picks inside
+  its home range and climbs to over several seconds, which is the long diagonal you see in
+  a real tank when a fish decides the other side of the rock looks better. Cruisers do
+  this over a wide range, hoverers barely at all, and dart fish resample about twice as
+  often as anything else because a damselfish genuinely cannot make up its mind.
+- **The species band is an envelope, not a corridor.** It bounds where the fish *may* go,
+  so a goby still holds the sand and a chromis still rides high. The animal is free inside
+  it.
+- **The range is anchored.** A fish explores a home patch around wherever it settled
+  rather than random-walking the whole band. Without the anchor the depth target is an
+  unanchored walk, and over a few minutes the fish commutes from the surface to the sand —
+  which is the opposite of free-swimming.
+
+There is a coupling in this that is easy to miss and was measured before it was believed:
+vertical speed is `amplitude x frequency`, the amplitude is a fraction of the band while
+the frequency is absolute, so a big fish in a wide band weaves *faster* than it swims. The
+first attempt had glide species at a level fraction of 0.42 — climbing nearly as fast as
+they travelled, which reads as a leaf falling sideways. Both numbers are kept low on
+purpose: a slow, wide weave covers the same ground as a fast, tight one and looks like a
+fish. Verify asserts the ratio, and it is not decoration.
+
+The remaining archetypes:
+
+- `drift` (octopus, squid, both jellies, the mermaid): the same sideways journey, but the
+  depth climbs and sinks in long arcs — down, then up, then sideways — and the animal is
+  driven along it by its own propulsion, which is what makes the motion read as *pushing*
+  rather than as gliding: the jelly only gains speed at the top of the bell contraction,
+  the squid and the octopus leave in jets and glide between them, the mermaid rises on each
+  stretch of her tail. Measured over a minute, a drifter covers a median 157px of depth and
+  862px of ground.
 - `cross`: a diagonal lane across the lower tank. No species uses it any more — the
-  tentacled animals that did have been moved to `drift` — but the behaviour is still
-  there for anything that wants a straight low sweep.
+  tentacled animals that did have been moved to `drift` — but the behaviour is still there
+  for anything that wants a straight low sweep.
+
+**And the shoal is seeded spread out, not stacked.** This was the last piece and the least
+obvious. Fish are placed on a jittered grid of cells, and the cursor that walked those
+cells was global, so a species' whole population landed in *adjacent* cells. The shoal
+therefore arrived already clumped, and the flocking pull had nothing to pull against —
+which is why the tank looked like four tight knots with empty water between them even
+after the depth model was fixed. The cursor now strides by a per-species amount that is
+coprime with the cell count, so consecutive fish of one species land in different parts of
+the window. Flocking cohesion is also deliberately weaker *vertically* than horizontally,
+with a small per-fish standing offset: pulling equally on both axes flattens a school into
+one ribbon, which is what a school looks like on a poster and not what it looks like in
+water.
 
 Leaving the tank is not blocked and it is not wrapped either: the world has no far
 wall, so an animal that swims a body length past the buffer is simply retired and a
 different one is introduced off the opposite edge. Only an animal chasing food holds
 station at the glass, which is the one case where swimming off in pursuit of a crumb
-would look like a bug. Bottom dwellers are exempt from lanes entirely — the sand
+would look like a bug. Bottom dwellers are exempt from depth entirely — the sand
 decides their depth.
 
 Nothing is ever placed in the middle of the view. `spawn()` with no coordinates picks a

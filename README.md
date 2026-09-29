@@ -47,7 +47,7 @@ npm run dev      # http://127.0.0.1:5177
 - **Calm / Lively / Wild** changes how busy the water is.
 - **Sound** turns on procedurally synthesised water, bubbles and chomps — no audio
   files. It starts on your click, so browsers allow it.
-- **Field guide** lists all 26 species with a live population count and each animal's real
+- **Field guide** lists all 36 species with a live population count and each animal's real
   adult length.
 - **Hide info** takes the name, the counters and the how-to off the glass for a tank with
   nothing written on it. The controls stay, because that is where the button that brings the
@@ -57,8 +57,8 @@ npm run dev      # http://127.0.0.1:5177
 
 ## The cast
 
-26 species across twelve creature types, each with its own rig, behaviour and
-appetite: 15 reef fish, a reef octopus, an opal squid, a green turtle, a blacktip
+36 species across twelve creature types, each with its own rig, behaviour and
+appetite: 24 reef fish, a reef octopus, an opal squid, a green turtle, a blacktip
 reef shark, a **blue whale**, a spotted eagle ray, two jellyfish, a mermaid, a golden
 seahorse, a reef crab and a coral starfish — plus coral fans, anemones, kelp, rocks,
 sand ripples and a treasure chest spilling coins on every second screen or so.
@@ -70,17 +70,26 @@ The shark cruises and occasionally makes an investigative dash at you; fish pani
 scatter when it comes as close as it does; the squid jets and inks when startled; the
 octopus flares red if you crowd it; the mermaid waves back when she notices the cursor.
 
-**How they travel.** Nothing is tied to a spot. Every animal holds a lane derived
-from its species' depth band and swims along it, in one direction, indefinitely —
-there is no far wall to turn at. The octopus, the squid, the jellies and the mermaid
-run a `drift` lane instead: down, then up, then sideways, driven by their own
-propulsion — a bell contraction, a jet, a sweep of the arms, a stretch of the tail.
-Measured over a minute, a drifter covers a median 157px of depth on the way past.
+**How they travel.** Nothing is pinned to a line. Every animal carries a depth it is
+working toward and a bob phase of its own, and it moves between depths the way a reef fish
+does: a slow weave while it travels, and every few seconds a decision to be somewhere else
+in the column, taken as a long diagonal rather than a step. So a fish wanders freely while
+its species keeps to the part of the water it belongs in — a goby holds the sand, a
+butterflyfish works the mid-water, a chromis rides high — and the band decides where it
+*may* go, not the corridor it is glued to. The range is anchored: a fish explores a home
+patch around wherever it settled rather than random-walking the whole band over a few
+minutes. Measured in the browser, a fish covers about 3% of the tank height in six seconds
+while keeping 98% of its motion horizontal — it is going somewhere, and it is going along.
+
+The octopus, the squid, the jellies and the mermaid run a `drift` arc instead: down, then
+up, then sideways, driven by their own propulsion — a bell contraction, a jet, a sweep of
+the arms, a stretch of the tail. Measured over a minute, a drifter covers a median 157px
+of depth on the way past.
 
 **And they arrive from off screen.** Nothing is ever placed in the middle of the view.
-A new animal picks a side, starts 6–20% of a screen outside the frame, takes a random
-rung of its own depth band and swims in, so the fish you are watching was somewhere
-else a moment ago and the fish that leaves is replaced by one you have not met.
+A new animal picks a side, starts 6–20% of a screen outside the frame and swims in, so the
+fish you are watching was somewhere else a moment ago and the fish that leaves is replaced
+by one you have not met.
 
 **Three of them are rare.** The blue whale, the blacktip reef shark and the mermaid are
 guests rather than cast: each arrives on its own schedule — the whale first at about
@@ -225,6 +234,15 @@ zero-size test; and `getBoundingClientRect` is post-transform, so a panel that s
 `offsetWidth`/`offsetHeight` for that reason, and checks the other half of the promise
 too — the controls row has to survive the hide, or there is no way back.
 
+While the cast was being reworked, `verify.mjs` grew the checks that would have caught the
+problems it found. The fish check is per *animal*, not per species: a span taken across
+every fish of a kind measures how spread out the shoal is, not how much any one fish swims,
+so a school holding station forever still shows a huge spread. Per animal, the motion probe
+accumulates how much depth that fish actually covered — under 0.6% of the tank height in six
+seconds means the fish are welded to a line, and over 25% means they are milling rather than
+swimming. The level-fraction check (horizontal speed must dominate) is what exposed glide
+species climbing at 0.42, faster across than along.
+
 The frame budget in that report is retried and the cheapest observation kept, because
 this machine is shared with a dev server and a browser: contention can only ever add
 time, and a reading that is still high is labelled as contended rather than presented
@@ -233,7 +251,9 @@ as the tank's frame cost.
 One caveat about the harness: driving thousands of frames inside a *single*
 `__reef.render(n)` call starves the browser's event loop and the population drifts
 away, which is an artefact of the measurement, not the tank. Verify and the probes
-step in chunks, which is also how the real loop works.
+step in chunks, which is also how the real loop works. A long single call is also one
+protocol request that has to finish before anything else can be asked, so with a full cast
+of hunting fish it runs past the protocol timeout and looks like a harness crash.
 
 The page also carries a small self-check in `index.html` that records anything which
 throws during startup into `window.__REEF_ERRORS__`.
