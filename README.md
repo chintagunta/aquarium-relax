@@ -22,12 +22,13 @@ npm run dev      # http://127.0.0.1:5177
 
 ## What you can do
 
-- **Feed them.** Click anywhere in the water. Twelve crumbs scatter, sink and sway. Every fish
-  that can see one claims it, turns, and closes — reading the crumb's sink and sway to aim
-  where it *will* be, then easing off over the last body length so it takes the food rather
-  than ramming through it. It opens its mouth as it arrives. Bottom feeders — the crab and the
-  sand goby — only notice food once it reaches the sand, and a crumb another fish has already
-  claimed is not worth crossing the tank for.
+- **Feed them.** Click anywhere in the water. Twelve crumbs scatter, sink and sway, and the
+  tank smells them: everything that can see the food turns and comes for it — 41 to 53 animals
+  answer a typical drop — reading the crumb's sink and sway to aim where it *will* be, then
+  easing off over the last body length so it takes the food rather than ramming through it. It
+  opens its mouth as it arrives. Up to three fish contest the same crumb, so a feed is a
+  scramble with winners and losers rather than a shoal glued to one pellet. Bottom feeders —
+  the crab and the starfish — only notice food once it reaches the sand.
 - **Swim along the reef.** The tank has no ends: drag the water, scroll, or use the arrow keys
   and it keeps going in both directions, forever. Fish that swim out of view are gone for good
   and new ones swim in to replace them, so the shoal you are watching is one you will not see
@@ -86,7 +87,9 @@ leaves. Scroll away and it is gone until its next visit.
 **They always swim head first.** A fish that changes direction is *mirrored*, never
 rotated through 180 degrees. The only rotation left is the tilt of its nose as it
 climbs or dives, so it is never seen tail-first, sideways, or pirouetting on the
-spot to turn around.
+spot to turn around. Every rig is authored nose at +x for exactly this reason, and
+`.qa/verify.mjs` checks it against the canvas rather than against the simulation's own
+idea of which way a fish is pointing.
 
 ## How it works
 

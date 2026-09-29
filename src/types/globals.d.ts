@@ -40,6 +40,8 @@ export interface ReefHandle {
     claim: number;
   }>;
   frames(): number;
+  /** Animals each depth pass actually drew in the last frame. */
+  drawn(): { far: number; mid: number; near: number; total: number };
   /** Advance the tank by n fixed steps, rendering each one. */
   render(n?: number, dt?: number): number;
   /** Synchronous ms per update+render pair — the honest frame budget. */

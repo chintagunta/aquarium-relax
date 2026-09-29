@@ -179,6 +179,8 @@ export function useAquarium(canvasRef: React.RefObject<HTMLCanvasElement | null>
           slice: c.species.size >= 0.2 ? (c.depth < 0.4 ? 'mid' : 'near') : c.depth < 0.46 ? 'far' : c.depth < 0.74 ? 'mid' : 'near',
         })),
       frames: () => frameCount,
+      /** How many animals each depth pass actually drew in the last frame. */
+      drawn: () => renderer.drawnCounts(),
       /**
        * Advances the tank by `n` fixed steps and renders each one, on demand.
        * The live loop is throttled by the browser whenever the tab is not

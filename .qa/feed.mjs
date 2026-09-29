@@ -68,9 +68,19 @@ const report = await ev(`(() => {
     const y = 120 + ((i * 53) % 260);
     const before = r.stats().meals;
     const near = r.sample().filter((c) => Math.abs(c.x - x) < 260 && Math.abs(c.y - y) < 200).length;
+    const hungry = r.sample().filter((c) =>
+      c.x >= v.x && c.x <= v.x + v.width && c.sated <= 0 &&
+      (c.kind === 'fish' || c.kind === 'seahorse' || c.kind === 'squid' || c.kind === 'octopus')).length;
     r.feed(x, y);
-    r.render(60);
-    const at075 = r.population().pellets;
+    // Watch who comes for it: every animal that ever takes a crumb as its goal
+    // is a responder, and the whole point of a feed is that everything which can
+    // see the food swims at it.
+    const responders = new Set();
+    for (let k = 0; k < 10; k++) {
+      r.render(30);
+      for (const c of r.sample()) if (c.goalDist >= 0) responders.add(c.id);
+    }
+    const at5 = r.population().pellets;
     r.render(300);
     const after5 = r.population().pellets;
     // A drop can land in a gap between two lanes. Food that is still there a
@@ -79,7 +89,9 @@ const report = await ev(`(() => {
     out.push({
       drop: i,
       near,
-      at075,
+      hungry,
+      responders: responders.size,
+      at075: at5,
       after5,
       after17: r.population().pellets,
       eaten: r.stats().meals - before,
@@ -97,19 +109,28 @@ const total = report[report.length - 1].total;
 const boot = report[0].boot;
 for (const d of report) {
   console.log(
-    `drop ${d.drop}: ${String(d.near).padStart(3)} animals within reach | ` +
-      `crumbs ${d.at075}/12 at 0.75s -> ${d.after5} at 5s -> ${d.after17} at 17s | eaten ${d.eaten}`,
+    `drop ${d.drop}: ${String(d.near).padStart(3)} within reach of the spot, ${String(d.hungry).padStart(3)} hungry on screen | ` +
+      `${String(d.responders).padStart(3)} came for it | ` +
+      `crumbs ${d.at075}/12 at 5s -> ${d.after17} at 17s | eaten ${d.eaten}`,
   );
 }
+const shares = report.map((d) => d.responders / Math.max(1, d.hungry));
+const worstShare = Math.min(...shares);
 console.log(`\neaten ${eaten}/${dropped} crumbs across ${report.length} drops, worst drop ${worst}/12`);
+console.log(
+  `responders: ${report.map((d) => d.responders).join(', ')} of ${report.map((d) => d.hungry).join(', ')} hungry on screen ` +
+    `(worst share ${(worstShare * 100).toFixed(0)}%)`,
+);
 console.log(`population ${boot} -> ${total} over ${report.length} hard scrolls`);
 writeFileSync('.qa/out/feed.json', JSON.stringify(report, null, 2));
 
 // A drop in a quiet corner can take a while to be noticed, so the bar is not
 // 12/12 — but food that is still sitting there after seventeen seconds, past the
-// first screenful of an endless tank, is exactly the bug this checks for.
+// first screenful of an endless tank, is exactly the bug this checks for. And a
+// feed where most of the hungry fish in shot ignore the food is the other one.
 const failures = [];
 if (worst < 6) failures.push(`a drop fed only ${worst}/12 crumbs`);
+if (worstShare < 0.5) failures.push(`only ${(worstShare * 100).toFixed(0)}% of the hungry fish came to a drop`);
 if (total > boot * 2.5) failures.push(`the cast grew from ${boot} to ${total} while scrolling`);
 console.log(failures.length ? '\nFEED FAILED: ' + failures.join('; ') : 'feed ok');
 

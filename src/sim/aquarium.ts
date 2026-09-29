@@ -32,6 +32,12 @@ export const SIM = {
   maxPellets: 160,
   /** Pellets sink at this fraction of the world height per second. */
   sinkRate: 0.055,
+  /**
+   * How many animals may chase one crumb at once. Enough that everything which
+   * can see the food comes for it; few enough that the crumbs are shared out
+   * instead of the whole shoal stacking on one of them.
+   */
+  contest: 3,
   /** How long a fed fish loses interest in the next pellet. */
   satedTime: 3.4,
   /** Neighbour search radius for schooling, as a fraction of tank height. */
@@ -40,8 +46,8 @@ export const SIM = {
   fleeRadius: 0.13,
   /** Below this fraction of the tank height, the sand line matters. */
   floorMargin: 0.02,
-  /** Click ripples also nudge life away from the pointer. */
-  ripplePush: 46,
+  /** A gentle nudge away from a click: the ring is the event, not a shockwave. */
+  ripplePush: 20,
   /** How fast the window eases toward where it is being scrolled to. */
   scrollEase: 9,
 } as const;
@@ -123,13 +129,13 @@ class Grid {
 /**
  * How much of the frame each rig covers, in body lengths, and how much of that
  * sits *ahead* of the origin. It matters because the art is anchored
- * differently per rig: a fish is drawn from the nose back, so it is entirely
- * behind the point the simulation steers, while a jelly hangs under its bell
- * and a turtle is centred on its shell. Getting this wrong puts animals either
- * visibly through the glass or turning a body length early.
+ * differently per rig: a jelly hangs under its bell and a turtle is centred on
+ * its shell, while a fish is drawn with half its body in front of the steer
+ * point. Getting this wrong puts animals either visibly through the glass or
+ * turning a body length early.
  */
 const RIG_EXTENT: Record<CreatureKind, { len: number; ahead: number }> = {
-  fish: { len: 1.05, ahead: 0 },
+  fish: { len: 1.05, ahead: 0.525 },
   shark: { len: 1.05, ahead: 0 },
   whale: { len: 1.02, ahead: 0 },
   squid: { len: 1.1, ahead: 0 },
@@ -198,6 +204,8 @@ export class Aquarium {
   private guests: Guest[] = [];
   /** Live count of the drifting dust motes, so ambient() need not scan. */
   private motes = 0;
+  /** How far food is carrying through the water, 0..1. See `vision()`. */
+  private scent = 0;
 
   constructor(seed = 20260920) {
     this.rng = new Rng(seed);
@@ -385,6 +393,7 @@ export class Aquarium {
     this.particles = [];
     this.ripples = [];
     this.meals = 0;
+    this.scent = 0;
     this.time = 0;
     this.populate();
   }
@@ -527,6 +536,7 @@ export class Aquarium {
         eaten: false,
         fresh: 1,
         claim: 0,
+        chasers: 0,
       });
       added++;
     }
@@ -624,6 +634,12 @@ export class Aquarium {
       this.grid.insert(c);
       this.byId.set(c.id, c);
     }
+    // Count the crowd on each crumb before anyone decides anything: how many
+    // animals are already on a crumb is what caps the crowd.
+    if (this.pellets.length) {
+      for (const p of this.pellets) p.chasers = 0;
+      for (const c of this.creatures) if (c.target) c.target.chasers++;
+    }
 
     for (const c of this.creatures) {
       c.stateTime += dt;
@@ -636,6 +652,9 @@ export class Aquarium {
     }
 
     this.updatePellets(dt);
+    // Food carries: while there is food in the water the whole tank can smell
+    // it from further away, and the trail fades once the crumbs are gone.
+    this.scent = clamp(this.scent + (this.pellets.length ? dt * 0.45 : -dt * 0.5), 0, 1);
     this.updateBubbles(dt);
     this.updateParticles(dt);
     for (let i = this.ripples.length - 1; i >= 0; i--) {
@@ -751,7 +770,11 @@ export class Aquarium {
     dy += edges.y;
 
     // ---- pointer curiosity / shyness
-    if (this.camera.active) {
+    // Not while it is chasing food: a click puts the pointer exactly where the
+    // crumbs are, and repelling a fish from the thing it is trying to eat made
+    // feeding look like the fish were avoiding the food.
+    const chasing = c.state === 'seek' && c.target !== null;
+    if (this.camera.active && !chasing) {
       const d = Math.sqrt(dist2(c.x, c.y, this.camera.wx, this.camera.wy));
       const near = this.height * 0.16;
       if (d < near && kind !== 'starfish') {
@@ -1519,7 +1542,11 @@ export class Aquarium {
       case 'mermaid':
         return this.height * 0.06;
       default:
-        return this.height * (0.22 + s.appetite * 0.18);
+        // Food carries: the longer it has been in the water the further away it
+        // is noticed, so a click brings the nearby fish in immediately and the
+        // rest of the tank within a few seconds — the fish that can see the
+        // feed swim to it, and the ones that only smell it follow.
+        return this.height * (0.3 + s.appetite * 0.22 + this.scent * 0.42);
     }
   }
 
@@ -1531,16 +1558,16 @@ export class Aquarium {
     let bestD = radius * radius;
     for (const p of this.pellets) {
       if (p.eaten) continue;
-      // Someone else got there first. A fish will still take a crumb off
-      // another fish's nose if it is close enough to touch, but it will not
-      // swim across the tank to shadow it, which is what made a feeding click
-      // look like a single magnet instead of a scramble. A claim held by an
-      // animal that has since left the tank is not a claim at all.
+      // A crumb already being chased will still draw a crowd — every fish that
+      // can see the food swims at it — but the crowd is capped, so a click
+      // reads as a scramble with winners and losers rather than as the whole
+      // shoal glued to one pellet. A claim held by an animal that has since
+      // left the tank is not a claim at all.
       if (p.claim !== 0 && p.claim !== c.id) {
         const rival = this.byId.get(p.claim);
         if (!rival) {
           p.claim = 0;
-        } else if (dist2(c.x, c.y, p.x, p.y) > (this.bodyLen(c) * 1.3 + p.r * 2) ** 2) {
+        } else if (p.chasers >= SIM.contest) {
           continue;
         }
       }
@@ -1557,12 +1584,12 @@ export class Aquarium {
     return best;
   }
 
-  /** Commit to a crumb: hold it until it is eaten, gone, or taken. */
+  /** Commit to a crumb. Several animals may contest one, but only one holds it. */
   private claim(c: Creature): void {
     this.release(c);
     const target = this.nearestPellet(c, this.vision(c));
     if (target) {
-      target.claim = c.id;
+      if (target.claim === 0) target.claim = c.id;
       c.target = target;
     }
   }

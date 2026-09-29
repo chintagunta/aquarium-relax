@@ -144,6 +144,16 @@ down-left climbs.
 Two rigs are exempt. Crabs and starfish are drawn from above, where rotating genuinely
 is how they turn; the mermaid is upright and is mirrored with her own small lean.
 
+Everything else is authored nose at +x, and the mirror is the *only* thing that decides
+which way it is drawn — so a rig authored the other way round swims tail first no matter
+how right the simulation is. That is exactly what had happened to the fish: `paintFish`
+is built nose at 0, tail at +1, the mirror image of every other rig, and nothing noticed
+because `facing` and `vx` agreed with each other. The fix is two lines in the dispatch —
+`scale(-1, 1)` and a half-body shift — and it puts every fish back on its nose, centred
+where the simulation steers it. The lesson is in the wiring, not the geometry: a number
+that only ever gets compared with another number the same code produced can be wrong
+forever.
+
 ## The rare three
 
 The whale, the shark and the mermaid are guests, not cast. Each is a `visitor` in the
@@ -350,29 +360,35 @@ fish ramming through the food at flank speed and shooting out the other side.
 What it does now:
 
 1. A click in the water calls `feed()` — 12 crumbs scattered in a 46px radius, and `splash()`
-   — a ripple ring, 10 bubbles and a scatter impulse that startles everything within 16% of
-   the tank height.
+   — a ripple ring, 10 bubbles and a gentle nudge that stirs everything within 16% of the
+   tank height. It used to be four times that impulse, which threw the fish nearest the
+   click *away* from the food an instant before the food appeared.
 2. Crumbs sink at 5.5% of the tank height per second with a sine sway, and settle on the sand
    line where they dissolve after 38–62 seconds. The pellet pool is capped at 160.
-3. Each tick, an animal with `appetite > 0.3` that is not sated looks for an unclaimed crumb
-   within its vision radius (22–40% of tank height, species-dependent). The crab and starfish
-   only consider crumbs that have reached the sand.
-4. **It claims what it finds** and holds it until it is eaten, gone, or taken off its nose.
-   Only one fish chases a given crumb, so a feeding click reads as a scramble with winners and
-   losers rather than a single magnet. A claim held by an animal that has left the tank is not
-   a claim.
+3. Each tick, an animal with `appetite > 0.3` that is not sated looks for a crumb within its
+   vision radius. That radius is 30–52% of the tank height plus up to 42% more as `scent`
+   builds, so a click is noticed immediately by the fish on top of it and by the rest of the
+   tank within a couple of seconds: food carries in water. The crab and starfish only consider
+   crumbs that have reached the sand.
+4. **Everything that can see a crumb comes for it, and up to three animals will contest the
+   same one.** The cap is what keeps a click a scramble with winners and losers instead of the
+   whole shoal glued to a single pellet, and it is what stops a fish from being pulled off the
+   food by the other fish around it. A claim held by an animal that has since left the tank is
+   not a claim.
 5. The approach is a pursuit, not a beeline. The aim point is where the crumb *will* be by the
    time the fish arrives — crumbs sink and sway, and pointing straight at them makes a fish
    curve along behind and orbit. Speed eases from 1.8× down to 0.55× over roughly the last body
    length, so it closes and takes the crumb instead of ramming through it. Turn authority eases
    the same way, which is what produces the banked arc of a real strike.
-6. The mouth opens over that final approach, which is the only cue that says *eating* rather
+6. A chasing animal is exempt from the pointer-shyness term. Otherwise a click puts the cursor
+   exactly on the food and the shy half of the cast spends the whole frenzy being pushed off it.
+7. The mouth opens over that final approach, which is the only cue that says *eating* rather
    than merely arriving.
-7. Within bite reach — half its body length, minimum 1.2% of tank height — it eats. That
+8. Within bite reach — half its body length, minimum 1.2% of tank height — it eats. That
    increments the meal count, hides the crumb, releases the claim, spawns crumbs and sparks,
    sets `sated` for 3.4s (0.2s for the shark, which barely cares), and floats a heart if the
    animal is big enough to be worth celebrating.
-8. A feeding fish ignores its shoal: schooling is suspended for anyone in `seek`, because a
+9. A feeding fish ignores its shoal: schooling is suspended for anyone in `seek`, because a
    fish with food in sight has no interest in holding formation.
 
 Turn authority also came down generally — from `turn × 3.2` radians/sec to `turn × 2` — which
@@ -383,7 +399,9 @@ Measured: a click in open water gets **12 of 12 crumbs eaten within 5 seconds**,
 approach speed that falls from ~83 px/s at 150 px out to ~53 px/s at contact — and that
 holds wherever the tank has been scrolled to. `.qa/feed.mjs` checks it the only way that
 means anything: six drops at six different places in the endless tank, 72/72 crumbs eaten,
-with the population steady across the scrolls.
+with the population steady across the scrolls. It also counts who came: **41 to 53 animals
+answer each drop, against 36 to 51 hungry ones in shot** (the extras swim in from off screen),
+and no drop is answered by less than 88% of the fish that could see it.
 
 ## What was cut, and why
 

@@ -270,6 +270,8 @@ export interface Pellet extends Mover {
    * frenzy read as competition rather than as a magnet.
    */
   claim: number;
+  /** How many animals are chasing it this tick, so a crowd can be capped. */
+  chasers: number;
 }
 
 export interface Bubble extends Mover {

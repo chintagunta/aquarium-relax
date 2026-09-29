@@ -56,8 +56,16 @@ for (let i = 0; i < 40; i++) {
 await ev('window.dispatchEvent(new Event("resize"))');
 await new Promise((r) => setTimeout(r, 800));
 
+// The setup is usually one expression — often an IIFE that returns what it
+// framed — but it may equally be a couple of statements. Try it as an
+// expression first so its value can be reported, and fall back to running it
+// as written.
+const AS_EXPRESSION = JSON.stringify(`(${SETUP})`);
+
 const result = await ev(`(async () => {
-  ${SETUP};
+  let SETUP_RESULT = null;
+  try { SETUP_RESULT = await eval(${AS_EXPRESSION}); }
+  catch (e) { ${SETUP}; }
   // Count pixels that cannot be water, so the image and the number come from
   // the same canvas state rather than from two different runs.
   const c = document.querySelector('canvas');
@@ -70,6 +78,9 @@ const result = await ev(`(async () => {
   return {
     pop: window.__reef.population(),
     ink,
+    // Whatever the setup expression wanted to say about the frame it built —
+    // usually "here is the animal I framed, at these coordinates".
+    setup: typeof SETUP_RESULT === 'undefined' ? null : SETUP_RESULT,
     whale: (() => {
       const w = window.__reef.sample().find((c) => c.kind === 'whale');
       if (!w) return null;

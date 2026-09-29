@@ -41,6 +41,8 @@ export class Renderer {
   private far: Creature[] = [];
   private mid: Creature[] = [];
   private near: Creature[] = [];
+  /** Animals each pass put on the canvas this frame. See `drawnCounts()`. */
+  private painted = { far: 0, mid: 0, near: 0 };
 
   /**
    * Half-resolution buffer for the far animals. Drawing the distant school in
@@ -230,7 +232,7 @@ export class Renderer {
     this.bucket(a, a.view.x, w);
     ctx.save();
     ctx.translate(slide(1, 0.55), -cam.y * 0.55);
-    this.paintFarSlice(a, time, quality);
+    this.painted.far = this.paintFarSlice(a, time, quality);
     ctx.restore();
 
     // Push the far band back: one translucent fill, no filters.
@@ -284,7 +286,7 @@ export class Renderer {
     /* ------------------------------- mid life ---------------------------- */
     ctx.save();
     ctx.translate(slide(1, 0.7), -cam.y * 0.7);
-    this.paintSlice(ctx, a, this.mid, time, quality, a.view.x, w);
+    this.painted.mid = this.paintSlice(ctx, a, this.mid, time, quality, a.view.x, w);
     ctx.restore();
     if (prof) t = this.mark('midLife', t);
 
@@ -302,7 +304,7 @@ export class Renderer {
     /* ------------------------------- near life --------------------------- */
     ctx.save();
     ctx.translate(slide(1, 0.9), -cam.y * 0.9);
-    this.paintSlice(ctx, a, this.near, time, quality, a.view.x, w);
+    this.painted.near = this.paintSlice(ctx, a, this.near, time, quality, a.view.x, w);
     ctx.restore();
     if (prof) t = this.mark('nearLife', t);
 
@@ -432,19 +434,18 @@ export class Renderer {
    * the lowest level of detail and a flat wash of water over the top, so the
    * far band reads as distance without costing a filter.
    */
-  private paintFarSlice(a: Aquarium, time: number, quality: number): void {
+  private paintFarSlice(a: Aquarium, time: number, quality: number): number {
     const layer = this.farLayer;
     const lctx = this.farCtx;
     if (!layer || !lctx) {
-      this.paintSlice(this.ctx, a, this.far, time, quality, a.view.x, a.width);
-      return;
+      return this.paintSlice(this.ctx, a, this.far, time, quality, a.view.x, a.width);
     }
     lctx.setTransform(1, 0, 0, 1, 0, 0);
     lctx.clearRect(0, 0, layer.width, layer.height);
     lctx.save();
     lctx.scale(0.5, 0.5);
     lctx.translate(-a.view.x, 0);
-    this.paintSlice(lctx, a, this.far, time, quality, a.view.x, a.width);
+    const painted = this.paintSlice(lctx, a, this.far, time, quality, a.view.x, a.width);
     lctx.restore();
 
     const { ctx } = this;
@@ -452,6 +453,7 @@ export class Renderer {
     ctx.globalAlpha = 0.9;
     ctx.drawImage(layer, 0, 0, a.width, a.height);
     ctx.restore();
+    return painted;
   }
 
   private paintSlice(
@@ -463,13 +465,27 @@ export class Renderer {
     viewX: number,
     viewW: number,
     detail?: number,
-  ): void {
+  ): number {
     const lo = viewX - viewW * 0.15;
     const hi = viewX + viewW * 1.15;
+    let painted = 0;
     for (const c of list) {
       if (c.x < lo || c.x > hi) continue;
       this.paintCreature(ctx, a, c, time, detail ?? this.lodFor(a, c, quality));
+      painted++;
     }
+    return painted;
+  }
+
+  /**
+   * How many animals each pass actually put on the canvas this frame. The sim
+   * knowing where a fish is and the renderer drawing it there are two different
+   * claims, and this is the second one — a pass whose transform and culling
+   * disagree can skip every animal while the population report insists they are
+   * all in shot.
+   */
+  drawnCounts(): { far: number; mid: number; near: number; total: number } {
+    return { ...this.painted, total: this.painted.far + this.painted.mid + this.painted.near };
   }
 
   /** Level of detail follows the on-screen size of the animal. */

@@ -35,6 +35,9 @@ function n(detail: number, full: number, mid: number, low: number): number {
   return detail >= 2 ? full : detail === 1 ? mid : low;
 }
 
+/** Body length of the fish rig in body-length units. See `RIG_EXTENT.fish`. */
+const FISH_RIG_LEN = 1.05;
+
 /** Paint any creature in body-length units, nose/front at +x.
  *  `paintCreatureUpright` handles animals drawn standing up rather than
  *  streamlined along their direction of travel. */
@@ -42,6 +45,14 @@ export function paintCreature(args: PaintArgs): void {
   const rig = args.creature.species.body.rig;
   switch (rig) {
     case 'fish':
+      // `paintFish` is authored nose at 0, tail at +1 — the mirror image of
+      // every other rig, which is drawn nose at +x and centred on the point the
+      // simulation steers. Mirror it, once, and shift by half a body, so a fish
+      // swimming right is drawn head first *and* sits centred where the sim says
+      // it is, instead of being towed backwards.
+      args.ctx.save();
+      args.ctx.scale(-1, 1);
+      args.ctx.translate(-FISH_RIG_LEN / 2, 0);
       paintFish(
         args.ctx,
         args.creature.species,
@@ -52,6 +63,7 @@ export function paintCreature(args: PaintArgs): void {
         args.ink,
         args.creature.bite,
       );
+      args.ctx.restore();
       return;
     case 'jelly':
       paintJelly(args);

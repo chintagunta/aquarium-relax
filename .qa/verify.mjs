@@ -348,27 +348,55 @@ const main = async () => {
     const r = window.__reef;
     const canvas = document.querySelector('canvas');
     const g = canvas.getContext('2d');
-    const at = (x, y) => {
-      const d = g.getImageData(Math.max(0, Math.round(x)) - 2, Math.max(0, Math.round(y)) - 2, 5, 5).data;
+    const at = (x, y, r = 2) => {
+      const d = g.getImageData(Math.max(0, Math.round(x)) - r, Math.max(0, Math.round(y)) - r, r * 2 + 1, r * 2 + 1).data;
       let R = 0, G = 0, B = 0;
+      const n = (r * 2 + 1) ** 2;
       for (let i = 0; i < d.length; i += 4) { R += d[i]; G += d[i + 1]; B += d[i + 2]; }
-      return [R / 25, G / 25, B / 25];
+      return [R / n, G / n, B / n];
     };
     const check = () => {
       r.render(2);
       const v = r.view();
       const h = document.querySelector('canvas').clientHeight;
+      // Sim coordinates are CSS pixels; getImageData works in *buffer* pixels,
+      // and the watchdog is free to trim the backing store mid-run. Assuming
+      // they are the same made a whole school of fish read as absent water the
+      // moment the resolution was stepped down.
+      const kx = canvas.width / canvas.clientWidth;
+      const ky = canvas.height / canvas.clientHeight;
       const list = r.sample().filter((q) =>
         q.x >= v.x + 40 && q.x <= v.x + v.width - 40 && q.y > 40 && q.y < h - 160);
+      const passes = r.drawn();
       let drawn = 0;
+      let tested = 0;
+      const misses = [];
       for (const q of list) {
-        // The water behind varies slowly, so a colour change 70px up means ink.
-        const a = at(q.x - v.x, q.y);
-        const b = at(q.x - v.x, q.y - 70);
-        const diff = Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
-        if (diff > 18) drawn++;
+        const sx = q.x - v.x;
+        // The water behind varies slowly, so a colour change well above the
+        // animal means ink — but only where nothing else is swimming, or a
+        // neighbour reads as its own body and the sample proves nothing.
+        const clear = (y) =>
+          !list.some((o) => o !== q && Math.abs(o.x - v.x - sx) < 34 && Math.abs(o.y - y) < 46);
+        const above = q.y - 74;
+        const below = q.y + 74;
+        if (!clear(above) && !clear(below)) continue;
+        tested++;
+        // A small fish in the far pass is drawn at half resolution and washed
+        // with haze, so it barely moves the pixel it sits on: it gets a tighter
+        // window and a lower bar than a fish in the near pass.
+        const r2 = q.bodyPx < 34 ? 1 : 2;
+        const a = at(sx * kx, q.y * ky, r2);
+        const refs = [above, below].filter(clear).map((y) => at(sx * kx, y * ky, r2));
+        const diff = Math.max(
+          ...refs.map((b) =>
+            Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2])),
+          ),
+        );
+        if (diff > (q.slice === 'far' ? 9 : 16)) drawn++;
+        else if (misses.length < 8) misses.push({ slice: q.slice, kind: q.kind, y: Math.round(q.y), body: Math.round(q.bodyPx), diff: Math.round(diff) });
       }
-      return { view: Math.round(v.x), onScreen: list.length, drawn };
+      return { view: Math.round(v.x), onScreen: list.length, tested, drawn, passes, misses };
     };
     const here = check();
     // A teleport is the worst case the tank can be asked for: everything that
@@ -382,8 +410,15 @@ const main = async () => {
   log('drawn', JSON.stringify(report.drawn));
   for (const [where, d] of Object.entries(report.drawn)) {
     if (d.onScreen < 10) throw new Error(`only ${d.onScreen} animals on screen ${where} the scroll`);
-    if (d.drawn < d.onScreen * 0.7) {
-      throw new Error(`${where}: ${d.drawn} of ${d.onScreen} animals are actually drawn`);
+    // The renderer must have drawn as many as the sim has in shot...
+    if (d.passes.total < d.onScreen) {
+      throw new Error(`${where}: the passes drew ${d.passes.total} of ${d.onScreen} animals in shot`);
+    }
+    // ...and the canvas must show them where the sim says they are.
+    if (d.tested >= 6 && d.drawn < d.tested * 0.7) {
+      throw new Error(
+        `${where}: only ${d.drawn} of ${d.tested} sampled animals are visible where the sim puts them`,
+      );
     }
   }
 
